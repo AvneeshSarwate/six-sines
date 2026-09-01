@@ -6,6 +6,7 @@
 #include "catch2/catch2.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -132,4 +133,28 @@ TEST_CASE("headless C ABI routes independent macro modulation by note id", "[hea
     REQUIRE(relativeDifference(modALeft, dualLeft) < 0.05);
     REQUIRE(relativeDifference(dualLeft, unknownLeft) < 0.05);
     REQUIRE(relativeDifference(dualRight, unknownRight) < 0.05);
+}
+
+TEST_CASE("headless facade retains events across sub-block process calls", "[headless][facade]")
+{
+    headless::EngineFacade facade(48000.0);
+    std::array<float, 8> firstLeft{}, firstRight{};
+    REQUIRE(facade.process(8, nullptr, nullptr, firstLeft.data(), firstRight.data(), nullptr, 0));
+
+    std::array<float, 5> shortLeft{}, shortRight{};
+    const auto delayedNote = event(4, SX_EVENT_NOTE_ON, 7401, 60, 0, 0.8);
+    REQUIRE(facade.process(5, nullptr, nullptr, shortLeft.data(), shortRight.data(), &delayedNote,
+                           1));
+
+    // The event is due, but this call still ends exactly at the next internal boundary. It must
+    // remain pending until process() can execute that boundary rather than disappearing.
+    std::array<float, 3> bridgeLeft{}, bridgeRight{};
+    REQUIRE(facade.process(3, nullptr, nullptr, bridgeLeft.data(), bridgeRight.data(), nullptr, 0));
+
+    std::vector<float> renderedLeft(4096), renderedRight(4096);
+    REQUIRE(facade.process(static_cast<uint32_t>(renderedLeft.size()), nullptr, nullptr,
+                           renderedLeft.data(), renderedRight.data(), nullptr, 0));
+    const auto peak = std::max(*std::max_element(renderedLeft.begin(), renderedLeft.end()),
+                               *std::max_element(renderedRight.begin(), renderedRight.end()));
+    REQUIRE(peak > 1e-5f);
 }

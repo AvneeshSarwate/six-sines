@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 const modulePath = process.argv[2];
 const presetPath = process.argv[3];
 const renderQuantum = Number(process.argv[4] ?? 24_576);
+const nativePcmPath = process.argv[5];
 if (!modulePath) {
   throw new Error("usage: node web/direct-wasm-smoke.mjs /path/to/six-sines.js [preset.sxsnp]");
 }
@@ -83,7 +84,9 @@ try {
 
   const events = [
     makeEvent(0, EVENT.paramValue, { paramId: 500, value: 0.5 }),
-    makeEvent(0, EVENT.paramValue, { paramId: 506, value: 1 }),
+    // The focused modulation oracle needs a stationary sustain level. A native/Wasm preset
+    // comparison must not alter this sound-design parameter, so it uses the saved value.
+    !nativePcmPath && makeEvent(0, EVENT.paramValue, { paramId: 506, value: 1 }),
     makeEvent(0, EVENT.paramValue, { paramId: 522, value: 0 }),
     makeEvent(0, EVENT.paramValue, { paramId: 529, value: 0 }),
     makeEvent(0, EVENT.paramValue, { paramId: 532, value: 0 }),
@@ -99,7 +102,7 @@ try {
     makeEvent(8_192, EVENT.paramMod, { noteId: 101, key: 60, paramId: 40_000, value: 0.7 }),
     makeEvent(13_312, EVENT.paramMod, { noteId: 102, key: 60, paramId: 40_000, value: -0.4 }),
     makeEvent(18_432, EVENT.paramMod, { noteId: 9_999, key: 60, paramId: 40_000, value: 0.9 }),
-  ].sort((a, b) => a.frame - b.frame);
+  ].filter(Boolean).sort((a, b) => a.frame - b.frame);
 
   const eventSize = wasm._sx_event_sizeof();
   assert.equal(eventSize, 40, "unexpected sx_event ABI layout");
@@ -159,14 +162,41 @@ try {
     unknown_right_relative_change: relativeDifference(dualRight, unknownRight),
   };
 
+  if (nativePcmPath) {
+    const nativeBytes = await readFile(nativePcmPath);
+    assert.equal(nativeBytes.byteLength, totalFrames * 2 * Float32Array.BYTES_PER_ELEMENT,
+      "unexpected native PCM reference size");
+    const native = new Float32Array(nativeBytes.buffer, nativeBytes.byteOffset,
+      nativeBytes.byteLength / Float32Array.BYTES_PER_ELEMENT);
+    let squaredError = 0;
+    let squaredReference = 0;
+    let maxAbsoluteError = 0;
+    for (let frame = 0; frame < totalFrames; ++frame) {
+      for (let channel = 0; channel < 2; ++channel) {
+        const actual = channel === 0 ? left[frame] : right[frame];
+        const expected = native[channel * totalFrames + frame];
+        const error = actual - expected;
+        squaredError += error * error;
+        squaredReference += expected * expected;
+        maxAbsoluteError = Math.max(maxAbsoluteError, Math.abs(error));
+      }
+    }
+    report.native_wasm_normalized_rmse = Math.sqrt(squaredError / squaredReference);
+    report.native_wasm_max_absolute_error = maxAbsoluteError;
+    assert.ok(report.native_wasm_normalized_rmse < 0.02,
+      `native/Wasm PCM drift: ${JSON.stringify(report)}`);
+  }
+
   console.log(JSON.stringify(report, null, 2));
   assert.ok(controlLeft > 1e-5 && controlRight > 1e-5);
-  assert.ok(report.mod_a_addressed_relative_change > 0.20);
-  assert.ok(report.mod_a_other_relative_change < 0.05);
-  assert.ok(report.mod_b_addressed_relative_change > 0.20);
-  assert.ok(report.mod_b_other_relative_change < 0.05);
-  assert.ok(report.unknown_left_relative_change < 0.05);
-  assert.ok(report.unknown_right_relative_change < 0.05);
+  if (!nativePcmPath) {
+    assert.ok(report.mod_a_addressed_relative_change > 0.20);
+    assert.ok(report.mod_a_other_relative_change < 0.05);
+    assert.ok(report.mod_b_addressed_relative_change > 0.20);
+    assert.ok(report.mod_b_other_relative_change < 0.05);
+    assert.ok(report.unknown_left_relative_change < 0.05);
+    assert.ok(report.unknown_right_relative_change < 0.05);
+  }
 } finally {
   for (const pointer of allocations.reverse()) wasm._free(pointer);
   wasm._sx_destroy(handle);

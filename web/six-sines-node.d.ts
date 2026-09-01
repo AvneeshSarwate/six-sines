@@ -36,7 +36,6 @@ export interface SixSinesNodeOptions {
   maxFrames?: number;
   maxEventsPerQuantum?: number;
   queueCapacity?: number;
-  scheduleAheadSeconds?: number;
   readyTimeoutMs?: number;
 }
 
@@ -65,16 +64,18 @@ export class SixSinesNode {
   readonly context: BaseAudioContext;
   readonly node: AudioWorkletNode;
   readonly port: MessagePort;
-  readonly ready: Promise<{ type: "ready"; frame: number }>;
-  readonly readyInfo: { type: "ready"; frame: number };
+  readonly ready: Promise<{ type: "ready"; frame: number; buildId: string }>;
+  readonly readyInfo: { type: "ready"; frame: number; buildId: string };
   readonly lastError?: Error;
-  scheduleAheadSeconds: number;
 
   connect(destination: AudioNode, output?: number, input?: number): AudioNode;
   connect(destination: AudioParam, output?: number): void;
   disconnect(): void;
   disconnect(output: number): void;
   disconnect(destination: AudioNode | AudioParam): void;
+  /** Deliver an ordered event batch on the next AudioWorklet render quantum. */
+  send(events: SixSinesEvent[]): Promise<{ accepted: number; rejected: number }>;
+  /** Advanced/test API: every event must have an explicit frame or time. */
   schedule(events: SixSinesEvent[]): Promise<{ accepted: number; rejected: number }>;
   noteOn(event: SixSinesIdentity & SixSinesWhen & { key: number; velocity?: number }): Promise<unknown>;
   noteOff(event: SixSinesIdentity & SixSinesWhen & { key: number; velocity?: number }): Promise<unknown>;

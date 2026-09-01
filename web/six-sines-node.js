@@ -73,16 +73,15 @@ export class SixSinesNode {
         queueCapacity: options.queueCapacity,
       },
     });
-    const synth = new SixSinesNode(context, audioNode, options.scheduleAheadSeconds ?? 0.075);
+    const synth = new SixSinesNode(context, audioNode);
     await withTimeout(synth.ready, options.readyTimeoutMs ?? 15_000, "Six Sines worklet");
     return synth;
   }
 
-  constructor(context, audioNode, scheduleAheadSeconds) {
+  constructor(context, audioNode) {
     this.context = context;
     this.node = audioNode;
     this.port = audioNode.port;
-    this.scheduleAheadSeconds = scheduleAheadSeconds;
     this.nextRequestId = 1;
     this.requests = new Map();
     this.lastQueuedFrame = -1;
@@ -135,8 +134,18 @@ export class SixSinesNode {
 
   frameFor(event) {
     if (event.frame !== undefined) return Number(event.frame);
-    const time = event.time ?? this.context.currentTime + this.scheduleAheadSeconds;
-    return Math.round(time * this.context.sampleRate);
+    if (event.time !== undefined) return Math.round(event.time * this.context.sampleRate);
+    throw new Error("scheduled events require an explicit frame or time");
+  }
+
+  async send(events) {
+    if (events.some((event) => event.frame !== undefined || event.time !== undefined)) {
+      throw new Error("send() is immediate; use schedule() for explicit frame/time events");
+    }
+    if (!events.length) return { accepted: 0, rejected: 0 };
+    const response = await this.request("eventsNow", { events });
+    if (response.rejected) throw new Error(`worklet rejected ${response.rejected} event(s)`);
+    return response;
   }
 
   async schedule(events) {
@@ -156,36 +165,41 @@ export class SixSinesNode {
     return response;
   }
 
+  deliver(events) {
+    const timed = events.some((event) => event.frame !== undefined || event.time !== undefined);
+    return timed ? this.schedule(events) : this.send(events);
+  }
+
   noteOn({ noteId = -1, port = 0, channel = 0, key, velocity = 1, ...when }) {
-    return this.schedule([{ type: SixSinesEventType.noteOn, noteId, port, channel,
+    return this.deliver([{ type: SixSinesEventType.noteOn, noteId, port, channel,
       key, value: velocity, ...when }]);
   }
 
   noteOff({ noteId = -1, port = 0, channel = 0, key, velocity = 0, ...when }) {
-    return this.schedule([{ type: SixSinesEventType.noteOff, noteId, port, channel,
+    return this.deliver([{ type: SixSinesEventType.noteOff, noteId, port, channel,
       key, value: velocity, ...when }]);
   }
 
   noteExpression({ noteId = -1, port = 0, channel = 0, key = -1,
     expressionId, value, ...when }) {
-    return this.schedule([{ type: SixSinesEventType.noteExpression, noteId, port, channel,
+    return this.deliver([{ type: SixSinesEventType.noteExpression, noteId, port, channel,
       key, expressionId, value, ...when }]);
   }
 
   paramValue({ paramId, value, ...when }) {
-    return this.schedule([{ type: SixSinesEventType.paramValue, paramId, value, ...when }]);
+    return this.deliver([{ type: SixSinesEventType.paramValue, paramId, value, ...when }]);
   }
 
   paramMod({ noteId, port = 0, channel = 0, key = -1, paramId, amount, ...when }) {
     if (!Number.isInteger(noteId) || noteId < 0) {
       throw new Error("the initial Six Sines paramMod API requires a non-negative noteId");
     }
-    return this.schedule([{ type: SixSinesEventType.paramMod, noteId, port, channel,
+    return this.deliver([{ type: SixSinesEventType.paramMod, noteId, port, channel,
       key, paramId, value: amount, ...when }]);
   }
 
   allNotesOff(when = {}) {
-    return this.schedule([{ type: SixSinesEventType.allNotesOff, ...when }]);
+    return this.deliver([{ type: SixSinesEventType.allNotesOff, ...when }]);
   }
 
   async loadPreset(preset) {

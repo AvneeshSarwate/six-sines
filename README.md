@@ -13,6 +13,13 @@ In March 2025, we released version 1.1. You can read the changelog [here](doc/ch
 
 And please read the [acknowldgements](doc/ack.md) for a list of thanks.
 
+## Browser AudioWorklet port
+
+The `browser-audio-worklet` branch contains a headless WebAssembly/AudioWorklet build, a
+CLAP-shaped JavaScript API, and native-to-Wasm DSP parity tests. See
+[the web engine guide](web/README.md) for the paired native/browser preset workflow and the
+one-command verified build.
+
 ## Hey are there any demos of this?
 
 Kinsey Dulcet, who designed many of the factory patches, has a demo

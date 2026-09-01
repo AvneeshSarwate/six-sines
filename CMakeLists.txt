@@ -13,13 +13,34 @@ option(USE_SANITIZER "Build and link with ASAN" FALSE)
 option(COPY_AFTER_BUILD "Will copy after build" TRUE)
 option(BUILD_SINGLE_ONLY "Only build the one plugin - no seven sines out" FALSE)
 option(SIX_SINES_WEB_ENGINE_ONLY "Build only the portable Emscripten engine" FALSE)
+option(SIX_SINES_PAIRED_BUILD "Identify native and browser artifacts as one source build" FALSE)
 
 include(cmake/compile-options.cmake)
 
 ## New version
 include(libs/sst/sst-plugininfra/cmake/git-version-functions.cmake)
 version_from_versionfile_or_git()
+set(SIX_SINES_PORT_SOURCE_ID "${GIT_COMMIT_HASH}")
+if(SIX_SINES_PAIRED_BUILD)
+    execute_process(COMMAND git rev-parse --short=12 HEAD
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE SIX_SINES_PORT_SOURCE_ID
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            COMMAND_ERROR_IS_FATAL ANY)
+    execute_process(COMMAND git status --porcelain --untracked-files=normal
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            OUTPUT_VARIABLE SIX_SINES_PORT_DIRTY
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            COMMAND_ERROR_IS_FATAL ANY)
+    if(SIX_SINES_PORT_DIRTY)
+        string(APPEND SIX_SINES_PORT_SOURCE_ID "-dirty")
+    endif()
+    set(GIT_COMMIT_HASH "${SIX_SINES_PORT_SOURCE_ID}")
+    set(GIT_BRANCH "browser-audio-worklet")
+    set(GIT_IMPLIED_DISPLAY_VERSION "Browser Port ${SIX_SINES_PORT_SOURCE_ID}")
+endif()
 message(STATUS "DISPLAY_VERSION=${GIT_IMPLIED_DISPLAY_VERSION}; COMMIT_HASH=${GIT_COMMIT_HASH}; BRANCH=${GIT_BRANCH}")
+configure_file(web/build-manifest.json.in six-sines-build.json @ONLY)
 
 if(EMSCRIPTEN OR SIX_SINES_WEB_ENGINE_ONLY)
     include(cmake/web-engine.cmake)
@@ -60,6 +81,8 @@ add_library(${PROJECT_NAME}-core STATIC
         src/synth/macro_usage.cpp
 )
 target_include_directories(${PROJECT_NAME}-core PUBLIC src)
+target_compile_definitions(${PROJECT_NAME}-core PUBLIC
+        SIX_SINES_PORT_BUILD_ID="${SIX_SINES_PORT_SOURCE_ID}")
 target_link_libraries(${PROJECT_NAME}-core PUBLIC
         clap
         simde
@@ -190,4 +213,3 @@ add_clapfirst_installer(
 )
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
-

@@ -35,6 +35,9 @@ add_executable(six-sines-clap-reference
 		clap_macro_mod_reference.cpp
 )
 target_link_libraries(six-sines-clap-reference PRIVATE clap ${CMAKE_DL_LIBS})
+target_include_directories(six-sines-clap-reference PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(six-sines-clap-reference PRIVATE
+		SIX_SINES_EXPECTED_BUILD_ID="${SIX_SINES_PORT_SOURCE_ID}")
 if (APPLE)
 	# Synth construction uses the macOS documents-folder APIs. Keep their autoreleased Cocoa
 	# objects alive correctly while the dynamically loaded plugin is constructed and rendered.
