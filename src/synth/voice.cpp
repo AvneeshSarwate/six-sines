@@ -17,7 +17,9 @@
 #include "sst/cpputils/constructors.h"
 #include "synth/matrix_index.h"
 #include "synth/patch.h"
+#if !defined(SIX_SINES_PORTABLE)
 #include "libMTSClient.h"
+#endif
 
 namespace baconpaul::six_sines
 {
@@ -42,7 +44,8 @@ Voice::Voice(const Patch &p, MonoValues &mv)
                                     this->sourceAtMatrix(i), mv, voiceValues);
           })),
       macroNode(scpu::make_array_lambda<MacroVoiceNode, numMacros>(
-          [&p, this, &mv](auto i) { return MacroVoiceNode(p.macroNodes[i], mv, voiceValues); }))
+          [&p, this, &mv](auto i)
+          { return MacroVoiceNode(p.macroNodes[i], mv, voiceValues, i); }))
 {
     std::fill(isKeytrack.begin(), isKeytrack.end(), true);
     std::fill(cmRatio.begin(), cmRatio.end(), 1.f);
@@ -73,6 +76,11 @@ void Voice::attack()
         mpeLagMs, monoValues.sr.sampleRate, 1.0 / blockSize);
     voiceValues.noteExpressionPanBipolarLag.setRateInMilliseconds(
         mpeLagMs, monoValues.sr.sampleRate, 1.0 / blockSize);
+
+    resetPerNoteMacroModulation();
+    for (auto &lag : voiceValues.macroLevelModulationLag)
+        lag.setRateInMilliseconds(monoValues.paramAutomationSmoothingTimeMs,
+                                  monoValues.sr.sampleRate, 1.0 / blockSize);
     voiceValues.firstBlockAfterAttack = true;
 
     for (auto &n : macroNode)
@@ -122,6 +130,8 @@ void Voice::renderBlock()
     stepLag(voiceValues.mpePressureLag, voiceValues.mpePressure);
     stepLag(voiceValues.noteExpressionTuningInSemisLag, voiceValues.noteExpressionTuningInSemis);
     stepLag(voiceValues.noteExpressionPanBipolarLag, voiceValues.noteExpressionPanBipolar);
+    for (int i = 0; i < numMacros; ++i)
+        stepLag(voiceValues.macroLevelModulationLag[i], voiceValues.macroLevelModulation[i]);
 
     // Refresh unison-derived per-voice scalars from the (smoothed) mono hoists so
     // unisonSpread / unisonPan track host automation and UI knob moves mid-note.
@@ -135,6 +145,7 @@ void Voice::renderBlock()
     }
 
     float retuneKey = voiceValues.key;
+#if !defined(SIX_SINES_PORTABLE)
     if (monoValues.mtsHasMaster)
     {
         if (monoValues.mpeActive)
@@ -160,6 +171,7 @@ void Voice::renderBlock()
         }
     }
     else
+#endif
     {
         retuneKey += voiceValues.mpeBendInSemisLag.v;
     }
@@ -204,7 +216,9 @@ void Voice::renderBlock()
         }
         else
         {
-            voiceValues.macroOut[m] = *monoValues.macroPtr[m];
+            voiceValues.macroOut[m] =
+                std::clamp(*monoValues.macroPtr[m] + voiceValues.macroLevelModulationLag[m].v,
+                           -1.f, 1.f);
         }
         mn.wasPowerOn = mn.macroPowerOn;
     }
@@ -372,6 +386,7 @@ void Voice::cleanup()
     voiceValues.mpePressure = 0;
     voiceValues.noteExpressionTuningInSemis = 0;
     voiceValues.noteExpressionPanBipolar = 0;
+    resetPerNoteMacroModulation();
 
     for (auto &m : macroNode)
         m.envCleanup();
@@ -399,6 +414,13 @@ void Voice::cleanup()
     out.envCleanup();
     out.ftModNode.envCleanup();
     out.panModNode.envCleanup();
+}
+
+void Voice::resetPerNoteMacroModulation()
+{
+    voiceValues.macroLevelModulation.fill(0.f);
+    for (auto &lag : voiceValues.macroLevelModulationLag)
+        lag.snapTo(0.f);
 }
 
 void Voice::setupPortaTo(uint16_t newKey, float log2Time)

@@ -41,6 +41,7 @@ struct Voice
     void attack();
     void renderBlock();
     void cleanup();
+    void resetPerNoteMacroModulation();
 
     bool used{false};
 
