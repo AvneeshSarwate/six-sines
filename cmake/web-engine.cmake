@@ -41,6 +41,8 @@ add_library(six-sines-core STATIC
 )
 target_include_directories(six-sines-core PUBLIC src)
 target_compile_definitions(six-sines-core PUBLIC SIX_SINES_PORTABLE=1)
+target_compile_definitions(six-sines-core PUBLIC
+        SIX_SINES_PORT_BUILD_ID="${SIX_SINES_PORT_SOURCE_ID}")
 target_compile_options(six-sines-core PUBLIC -msimd128)
 target_link_libraries(six-sines-core PUBLIC
         clap
@@ -79,8 +81,8 @@ target_link_options(six-sines-web PRIVATE
         "-sSTACK_SIZE=1048576"
         "-sINCOMING_MODULE_JS_API=['wasmBinary']"
         "-sASSERTIONS=1"
-        "-sEXPORTED_FUNCTIONS=['_sx_event_sizeof','_sx_param_info_sizeof','_sx_create','_sx_destroy','_sx_load_preset_utf8','_sx_get_param_count','_sx_get_param_info','_sx_process','_malloc','_free']"
-        "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','HEAPF32']"
+        "-sEXPORTED_FUNCTIONS=['_sx_event_sizeof','_sx_param_info_sizeof','_sx_get_build_id','_sx_create','_sx_destroy','_sx_load_preset_utf8','_sx_get_param_count','_sx_get_param_info','_sx_process','_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','HEAPF32','UTF8ToString']"
 )
 
 configure_file(web/six-sines-worklet.js six-sines-worklet.js COPYONLY)
@@ -90,7 +92,11 @@ configure_file(web/browser-smoke.html browser-smoke.html COPYONLY)
 configure_file(web/browser-smoke.js browser-smoke.js COPYONLY)
 configure_file(web/browser-realtime-smoke.html browser-realtime-smoke.html COPYONLY)
 configure_file(web/browser-realtime-smoke.js browser-realtime-smoke.js COPYONLY)
+configure_file(web/browser-realtime-hardening.html browser-realtime-hardening.html COPYONLY)
+configure_file(web/browser-realtime-hardening.js browser-realtime-hardening.js COPYONLY)
 configure_file("resources/factory_patches/Templates/INIT Sine.sxsnp" init.sxsnp COPYONLY)
+configure_file("resources/factory_patches/Bass/Warrior Macros.sxsnp"
+        realtime-replacement.sxsnp COPYONLY)
 
 find_program(SIX_SINES_NODE_EXECUTABLE node)
 if(SIX_SINES_NODE_EXECUTABLE)
@@ -115,6 +121,18 @@ if(SIX_SINES_NODE_EXECUTABLE)
             USES_TERMINAL
             VERBATIM
     )
+    add_custom_target(six-sines-check-web-96k
+            COMMAND "${SIX_SINES_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/web/preset-corpus-smoke.mjs"
+                    "$<TARGET_FILE:six-sines-web>"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/factory_patches"
+                    96000
+            DEPENDS six-sines-web
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            USES_TERMINAL
+            VERBATIM
+    )
     add_custom_target(six-sines-check-web
-            DEPENDS six-sines-check-web-direct six-sines-check-web-presets)
+            DEPENDS six-sines-check-web-direct six-sines-check-web-presets
+                    six-sines-check-web-96k)
 endif()

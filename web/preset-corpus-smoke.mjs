@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 
 const modulePath = process.argv[2];
 const presetRoot = process.argv[3];
+const sampleRate = Number(process.argv[4] ?? 48_000);
 if (!modulePath || !presetRoot) {
   throw new Error("usage: node web/preset-corpus-smoke.mjs /path/to/six-sines.js factory-patch-dir");
 }
@@ -58,7 +59,7 @@ let aggregatePeak = 0;
 try {
   for (let index = 0; index < presets.length; ++index) {
     const { file, bytes } = presets[index];
-    const handle = wasm._sx_create(48_000);
+    const handle = wasm._sx_create(sampleRate);
     assert.notEqual(handle, 0, `sx_create failed for ${file}`);
     try {
       wasm.HEAPU8.set(bytes, presetPointer);
@@ -97,6 +98,7 @@ try {
     preset_count: presets.length,
     rendered_frames_per_preset: renderFrames,
     render_quantum: renderQuantum,
+    sample_rate: sampleRate,
     finite_preset_count: presets.length,
     non_silent_preset_count: nonSilentPresetCount,
     aggregate_peak: aggregatePeak,

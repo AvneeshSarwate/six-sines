@@ -34,6 +34,8 @@ bool EngineFacade::loadPreset(std::string_view utf8State)
     engine->patchMain.copyValuesFrom(*loaded);
     engine->patch.copyValuesFrom(*loaded);
     engine->postLoad();
+    blockPosition = 0;
+    pendingEventCount = 0;
     return true;
 }
 
@@ -115,6 +117,9 @@ bool EngineFacade::process(uint32_t frames, const float *inputLeft, const float 
 
         if (blockPosition == 0)
         {
+            for (uint32_t index = 0; index < pendingEventCount; ++index)
+                dispatch(pendingEvents[index]);
+            pendingEventCount = 0;
             while (nextEvent < eventCount && events[nextEvent].frame <= frame)
                 dispatch(events[nextEvent++]);
             engine->process(nullptr);
@@ -124,6 +129,12 @@ bool EngineFacade::process(uint32_t frames, const float *inputLeft, const float 
         outputRight[frame] = engine->output[1][blockPosition];
         blockPosition = (blockPosition + 1) % blockSize;
     }
+
+    const auto remaining = eventCount - nextEvent;
+    if (remaining > pendingEventCapacity - pendingEventCount)
+        return false;
+    for (; nextEvent < eventCount; ++nextEvent)
+        pendingEvents[pendingEventCount++] = events[nextEvent];
 
     return true;
 }
@@ -138,6 +149,14 @@ extern "C"
 {
 uint32_t sx_event_sizeof(void) { return sizeof(sx_event); }
 uint32_t sx_param_info_sizeof(void) { return sizeof(sx_param_info); }
+const char *sx_get_build_id(void)
+{
+#ifdef SIX_SINES_PORT_BUILD_ID
+    return SIX_SINES_PORT_BUILD_ID;
+#else
+    return "unknown";
+#endif
+}
 
 sx_handle sx_create(double sampleRate)
 {

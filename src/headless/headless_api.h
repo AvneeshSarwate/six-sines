@@ -57,6 +57,7 @@ typedef struct sx_param_info
 
 uint32_t sx_event_sizeof(void);
 uint32_t sx_param_info_sizeof(void);
+const char *sx_get_build_id(void);
 
 sx_handle sx_create(double sample_rate);
 void sx_destroy(sx_handle handle);

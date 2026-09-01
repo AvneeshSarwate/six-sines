@@ -1,0 +1,7 @@
+{
+  "product": "Six Sines",
+  "projectVersion": "@PROJECT_VERSION@",
+  "sourceId": "@SIX_SINES_PORT_SOURCE_ID@",
+  "displayVersion": "@GIT_IMPLIED_DISPLAY_VERSION@",
+  "pairedBuild": "@SIX_SINES_PAIRED_BUILD@"
+}

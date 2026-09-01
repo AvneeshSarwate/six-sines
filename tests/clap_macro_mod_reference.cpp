@@ -9,6 +9,8 @@
 #include <clap/ext/state.h>
 #include <clap/ext/thread-check.h>
 
+#include "headless/headless_api.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -16,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -198,6 +201,13 @@ class Bundle
         require(factory->get_plugin_count(factory) > 0, "CLAP bundle contains no plugins");
         descriptor = factory->get_plugin_descriptor(factory, 0);
         require(descriptor != nullptr, "CLAP plugin descriptor is missing");
+        require(descriptor->version != nullptr, "CLAP plugin descriptor version is missing");
+#ifdef SIX_SINES_EXPECTED_BUILD_ID
+        require(std::string_view(descriptor->version).find(SIX_SINES_EXPECTED_BUILD_ID) !=
+                    std::string_view::npos,
+                "CLAP descriptor does not contain the paired build ID: " +
+                    std::string(descriptor->version));
+#endif
     }
 
     ~Bundle()
@@ -292,14 +302,20 @@ struct InputEvents
 
     void addNotePan(uint32_t time, int32_t noteId, int16_t key, double pan)
     {
+        addNoteExpression(time, noteId, key, CLAP_NOTE_EXPRESSION_PAN, pan);
+    }
+
+    void addNoteExpression(uint32_t time, int32_t noteId, int16_t key, int32_t expressionId,
+                           double value)
+    {
         clap_event_note_expression_t event{};
         setHeader(event.header, time, CLAP_EVENT_NOTE_EXPRESSION, sizeof(event));
-        event.expression_id = CLAP_NOTE_EXPRESSION_PAN;
+        event.expression_id = expressionId;
         event.note_id = noteId;
         event.port_index = 0;
         event.channel = 0;
         event.key = key;
-        event.value = pan;
+        event.value = value;
         events.emplace_back(event);
     }
 
@@ -415,6 +431,36 @@ class PluginInstance
         return buffer.bytes;
     }
 
+    void loadState(std::string_view bytes)
+    {
+        struct Buffer
+        {
+            std::string_view bytes;
+            size_t position{0};
+            clap_istream_t stream{};
+            explicit Buffer(std::string_view source) : bytes(source)
+            {
+                stream.ctx = this;
+                stream.read = read;
+            }
+            static int64_t CLAP_ABI read(const clap_istream_t *stream, void *destination,
+                                         uint64_t size)
+            {
+                auto &self = *static_cast<Buffer *>(stream->ctx);
+                const auto remaining = self.bytes.size() - self.position;
+                const auto count = std::min<size_t>(remaining, static_cast<size_t>(size));
+                if (count)
+                    std::memcpy(destination, self.bytes.data() + self.position, count);
+                self.position += count;
+                return static_cast<int64_t>(count);
+            }
+        } buffer(bytes);
+
+        require(!active, "CLAP state must be loaded before activation in this host");
+        require(state->load(plugin, &buffer.stream), "CLAP state load failed");
+        require(buffer.position == bytes.size(), "CLAP state load did not consume the preset");
+    }
+
     void process(uint64_t startFrame, InputEvents &input, float *left, float *right)
     {
         std::array<float *, 2> channels{left, right};
@@ -490,7 +536,43 @@ void addEventsForBlock(InputEvents &events, uint32_t blockStart)
     events.finish();
 }
 
-RenderResult render(PluginInstance &instance)
+void addPortableEventsForBlock(InputEvents &events, uint32_t blockStart,
+                               const std::vector<sx_event> &score)
+{
+    const auto blockEnd = blockStart + blockFrames;
+    for (const auto &event : score)
+    {
+        if (event.frame < blockStart)
+            continue;
+        if (event.frame >= blockEnd)
+            break;
+        const auto time = event.frame - blockStart;
+        switch (event.type)
+        {
+        case SX_EVENT_NOTE_ON:
+            events.addNote(time, true, event.note_id, event.key, event.value);
+            break;
+        case SX_EVENT_NOTE_OFF:
+            events.addNote(time, false, event.note_id, event.key, event.value);
+            break;
+        case SX_EVENT_NOTE_EXPRESSION:
+            events.addNoteExpression(time, event.note_id, event.key, event.expression_id,
+                                     event.value);
+            break;
+        case SX_EVENT_PARAM_VALUE:
+            events.addParamValue(time, event.param_id, event.value);
+            break;
+        case SX_EVENT_PARAM_MOD:
+            events.addParamMod(time, event.note_id, event.key, event.param_id, event.value);
+            break;
+        default:
+            require(false, "Unsupported portable event in CLAP stress score");
+        }
+    }
+    events.finish();
+}
+
+RenderResult render(PluginInstance &instance, const std::vector<sx_event> *score = nullptr)
 {
     instance.activate();
     RenderResult result;
@@ -504,7 +586,10 @@ RenderResult render(PluginInstance &instance)
         }
 
         InputEvents events;
-        addEventsForBlock(events, start);
+        if (score)
+            addPortableEventsForBlock(events, start, *score);
+        else
+            addEventsForBlock(events, start);
         instance.process(start, events, result.left.data() + start, result.right.data() + start);
         instance.runMainThreadCallback();
     }
@@ -551,15 +636,53 @@ std::set<clap_id> perNoteModulatableParameters(PluginInstance &instance)
     }
     return result;
 }
+
+std::string readBytes(const std::filesystem::path &path)
+{
+    std::ifstream input(path, std::ios::binary);
+    require(input.good(), "Unable to open preset: " + path.string());
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+void writePlanarPcm(const std::filesystem::path &path, const RenderResult &result)
+{
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    require(output.good(), "Unable to create PCM reference: " + path.string());
+    output.write(reinterpret_cast<const char *>(result.left.data()),
+                 static_cast<std::streamsize>(result.left.size() * sizeof(float)));
+    output.write(reinterpret_cast<const char *>(result.right.data()),
+                 static_cast<std::streamsize>(result.right.size() * sizeof(float)));
+    require(output.good(), "Unable to write PCM reference: " + path.string());
+}
+
+std::vector<sx_event> readPortableScore(const std::filesystem::path &path)
+{
+    const auto bytes = readBytes(path);
+    require(bytes.size() % sizeof(sx_event) == 0, "Portable score has an invalid byte length");
+    std::vector<sx_event> result(bytes.size() / sizeof(sx_event));
+    if (!bytes.empty())
+        std::memcpy(result.data(), bytes.data(), bytes.size());
+    for (size_t index = 0; index < result.size(); ++index)
+    {
+        require(result[index].frame < totalFrames, "Portable score event is outside the render");
+        require(index == 0 || result[index - 1].frame <= result[index].frame,
+                "Portable score is not sorted");
+    }
+    return result;
+}
 } // namespace
 
 int runMain(int argc, char **argv)
 {
     try
     {
-        require(argc == 2, "Usage: six-sines-clap-reference /path/to/Six Sines.clap");
+        require(argc >= 2 && argc <= 5,
+                "Usage: six-sines-clap-reference /path/to/Six Sines.clap [preset.sxsnp] [pcm.f32] [score.sxev]");
         Bundle bundle(argv[1]);
         PluginInstance instance(bundle);
+
+        if (argc >= 3)
+            instance.loadState(readBytes(argv[2]));
 
         std::set<clap_id> expected;
         for (uint32_t i = 0; i < 6; ++i)
@@ -567,7 +690,12 @@ int runMain(int argc, char **argv)
         const auto discovered = perNoteModulatableParameters(instance);
         require(discovered == expected, "Dynamic CLAP did not expose exactly six Macro Levels");
 
-        const auto result = render(instance);
+        std::vector<sx_event> score;
+        if (argc >= 5)
+            score = readPortableScore(argv[4]);
+        const auto result = render(instance, score.empty() ? nullptr : &score);
+        if (argc >= 4)
+            writePlanarPcm(argv[3], result);
         const auto controlLeft = rms(result.left, controlBegin, controlEnd);
         const auto controlRight = rms(result.right, controlBegin, controlEnd);
         const auto modALeft = rms(result.left, modABegin, modAEnd);
@@ -583,28 +711,43 @@ int runMain(int argc, char **argv)
         const auto modBOtherChange = relativeDifference(modALeft, dualLeft);
         const auto unknownLeftChange = relativeDifference(dualLeft, unknownLeft);
         const auto unknownRightChange = relativeDifference(dualRight, unknownRight);
+        const bool isConfiguredModulationOracle = argc == 2;
 
         std::cerr << "CLAP macro-mod RMS: control=" << controlLeft << ',' << controlRight
                   << " modA=" << modALeft << ',' << modARight << " dual=" << dualLeft << ','
                   << dualRight << " unknown=" << unknownLeft << ',' << unknownRight << '\n';
 
-        constexpr double unchangedTolerance{0.05};
-        constexpr double changedThreshold{0.20};
         require(controlLeft > 1e-5 && controlRight > 1e-5,
                 "Two same-key note IDs did not produce both isolated channels");
-        require(modAAddressedChange > changedThreshold,
-                "Mod-A did not substantially change the addressed left note");
-        require(modAOtherChange < unchangedTolerance, "Mod-A leaked into the right note");
-        require(modBAddressedChange > changedThreshold,
-                "Mod-B did not substantially change the addressed right note");
-        require(modBOtherChange < unchangedTolerance, "Mod-B leaked into the left note");
-        require(unknownLeftChange < unchangedTolerance &&
-                    unknownRightChange < unchangedTolerance,
-                "Unknown note_id changed audio");
+        require(std::all_of(result.left.begin(), result.left.end(),
+                            [](float sample) { return std::isfinite(sample); }) &&
+                    std::all_of(result.right.begin(), result.right.end(),
+                                [](float sample) { return std::isfinite(sample); }),
+                "CLAP render produced a non-finite sample");
+        if (isConfiguredModulationOracle)
+        {
+            constexpr double unchangedTolerance{0.05};
+            constexpr double changedThreshold{0.20};
+            require(modAAddressedChange > changedThreshold,
+                    "Mod-A did not substantially change the addressed left note");
+            require(modAOtherChange < unchangedTolerance, "Mod-A leaked into the right note");
+            require(modBAddressedChange > changedThreshold,
+                    "Mod-B did not substantially change the addressed right note");
+            require(modBOtherChange < unchangedTolerance, "Mod-B leaked into the left note");
+            require(unknownLeftChange < unchangedTolerance &&
+                        unknownRightChange < unchangedTolerance,
+                    "Unknown note_id changed audio");
+        }
 
         std::cout << "{\n"
-                  << "  \"test\": \"macro-per-note-clap\",\n"
+                  << "  \"test\": \""
+                  << (isConfiguredModulationOracle
+                          ? "macro-per-note-clap"
+                          : (score.empty() ? "native-clap-preset-reference"
+                                           : "native-clap-seeded-stress-reference"))
+                  << "\",\n"
                   << "  \"status\": \"pass\",\n"
+                  << "  \"plugin_version\": \"" << bundle.descriptor->version << "\",\n"
                   << "  \"per_note_parameter_count\": " << discovered.size() << ",\n"
                   << "  \"mod_a_frame\": " << modAFrame << ",\n"
                   << "  \"mod_b_frame\": " << modBFrame << ",\n"
