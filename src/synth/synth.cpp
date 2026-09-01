@@ -19,9 +19,10 @@
 #include "sst/basic-blocks/dsp/PanLaws.h"
 
 #include "tinyxml/tinyxml.h"
+#if !defined(SIX_SINES_PORTABLE)
 #include "sst/plugininfra/paths.h"
-
 #include "libMTSClient.h"
+#endif
 
 namespace baconpaul::six_sines
 {
@@ -36,7 +37,9 @@ Synth::Synth(bool mo)
       voices(sst::cpputils::make_array<Voice, VMConfig::maxVoiceCount>(patch, monoValues))
 {
     voiceManager = std::make_unique<voiceManager_t>(responder, monoResponder);
+#if !defined(SIX_SINES_PORTABLE)
     monoValues.mtsClient = MTS_RegisterClient();
+#endif
 
     for (int i = 0; i < numMacros; ++i)
     {
@@ -52,6 +55,7 @@ Synth::Synth(bool mo)
     std::fill(lState.begin(), lState.end(), nullptr);
     std::fill(rState.begin(), rState.end(), nullptr);
 
+#if !defined(SIX_SINES_PORTABLE)
     // User-defaults reader. Uses the same path/product name as the editor so both share the
     // one preferences file. Construction only reads it; nothing is written here.
     auto docPath = userDocumentsPath();
@@ -92,6 +96,7 @@ Synth::Synth(bool mo)
             }
         }
     }
+#endif
     audioDawState = dawStateMain.audio;
     applyAudioDawState(audioDawState);
 
@@ -123,10 +128,12 @@ Synth::Synth(bool mo)
 
 Synth::~Synth()
 {
+#if !defined(SIX_SINES_PORTABLE)
     if (monoValues.mtsClient)
     {
         MTS_DeregisterClient(monoValues.mtsClient);
     }
+#endif
 
     for (auto ls : lState)
         if (ls)
@@ -136,6 +143,7 @@ Synth::~Synth()
             src_delete(rs);
 }
 
+#if !defined(SIX_SINES_PORTABLE)
 fs::path Synth::userDocumentsPath()
 {
     try
@@ -158,6 +166,7 @@ fs::path Synth::userDocumentsPath()
     }
     return {};
 }
+#endif
 
 void Synth::toDawExtraState(TiXmlElement &e, const DawStateMain &s)
 {
@@ -379,7 +388,9 @@ void Synth::setSampleRate(double sampleRate)
 
 template <bool multiOut> void Synth::processInternal(const clap_output_events_t *outq)
 {
+#if !defined(SIX_SINES_PORTABLE)
     auto start = std::chrono::high_resolution_clock::now();
+#endif
     if (!SinTable::staticsInitialized)
         SinTable::initializeStatics();
 
@@ -710,7 +721,9 @@ template <bool multiOut> void Synth::processInternal(const clap_output_events_t 
             audioOutputRing.push(output[0], output[1], blockSize);
         }
 
-        // Finish CPU calculation
+        // Finish CPU calculation. AudioWorkletGlobalScope deliberately has no Performance API,
+        // and the headless engine has no editor consuming this value.
+#if !defined(SIX_SINES_PORTABLE)
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
         auto micros = duration.count();
@@ -718,6 +731,7 @@ template <bool multiOut> void Synth::processInternal(const clap_output_events_t 
         auto pct = micros * availmicrosinv;
         auto cpuFac = 0.995;
         cpuUsage = cpuUsage * cpuFac + pct * (1 - cpuFac);
+#endif
     }
 }
 
@@ -1215,15 +1229,28 @@ void Synth::handleParamValue(Param *p, uint32_t pid, float value)
 
     handleAudioThreadParamSideEffects(p);
 
-    AudioToMainMsg au = {AudioToMainMsg::UPDATE_PARAM, pid, value};
-    audioToMain.push(au);
+    if (!suppressMainThreadParamEcho)
+    {
+        AudioToMainMsg au = {AudioToMainMsg::UPDATE_PARAM, pid, value};
+        audioToMain.push(au);
 
-    // If no editor is open to drain audioToMain, ask the main thread to drain it into patchMain.
-    // Coalesce so at most one callback is pending per drain. Check the host first so tests (null
-    // host) never flip the flag.
-    if (clapHost && !editorActive.load(std::memory_order_relaxed) &&
-        !mainThreadDrainRequested.exchange(true))
-        clapHost->request_callback(clapHost);
+        // If no editor is open to drain audioToMain, ask the main thread to drain it into
+        // patchMain. Coalesce so at most one callback is pending per drain. Check the host first
+        // so tests (null host) never flip the flag.
+        if (clapHost && !editorActive.load(std::memory_order_relaxed) &&
+            !mainThreadDrainRequested.exchange(true))
+            clapHost->request_callback(clapHost);
+    }
+}
+
+bool Synth::handlePolyphonicParamMod(int16_t port, int16_t channel, int16_t key, int32_t noteId,
+                                     uint32_t paramId, double amount)
+{
+    if (noteId < 0 || !Patch::MacroNode::isLevelParamId(paramId))
+        return false;
+
+    voiceManager->routePolyphonicParameterModulation(port, channel, key, noteId, paramId, amount);
+    return true;
 }
 
 void Synth::handleAudioThreadParamSideEffects(Param *dest)

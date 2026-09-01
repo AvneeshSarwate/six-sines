@@ -80,6 +80,13 @@ struct VoiceValues
     // True for one renderBlock after attack(); see Voice::renderBlock for snap logic.
     bool firstBlockAfterAttack{true};
 
+    // CLAP per-note modulation of the six Macro Level parameters. The raw amount is the
+    // host-provided additive delta in the parameter's plain-value domain; the lag is what DSP
+    // reads. Both are per internal voice, so unison children can be routed as a host-note group.
+    std::array<float, numMacros> macroLevelModulation{};
+    std::array<sst::basic_blocks::dsp::OnePoleLag<float, false>, numMacros>
+        macroLevelModulationLag{};
+
     std::array<float, numMacros> macroOut{};
 
   private:

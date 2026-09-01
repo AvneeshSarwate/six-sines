@@ -12,6 +12,7 @@ set(PRODUCT_NAME "Six Sines")
 option(USE_SANITIZER "Build and link with ASAN" FALSE)
 option(COPY_AFTER_BUILD "Will copy after build" TRUE)
 option(BUILD_SINGLE_ONLY "Only build the one plugin - no seven sines out" FALSE)
+option(SIX_SINES_WEB_ENGINE_ONLY "Build only the portable Emscripten engine" FALSE)
 
 include(cmake/compile-options.cmake)
 
@@ -19,6 +20,11 @@ include(cmake/compile-options.cmake)
 include(libs/sst/sst-plugininfra/cmake/git-version-functions.cmake)
 version_from_versionfile_or_git()
 message(STATUS "DISPLAY_VERSION=${GIT_IMPLIED_DISPLAY_VERSION}; COMMIT_HASH=${GIT_COMMIT_HASH}; BRANCH=${GIT_BRANCH}")
+
+if(EMSCRIPTEN OR SIX_SINES_WEB_ENGINE_ONLY)
+    include(cmake/web-engine.cmake)
+    return()
+endif()
 
 
 include(cmake/CmakeRC.cmake)
@@ -40,6 +46,34 @@ cmrc_add_resource_library(${PROJECT_NAME}-fonts NAMESPACE sixsines_fonts
 
 set(JUCE_PATH "${CMAKE_SOURCE_DIR}/libs/JUCE")
 add_subdirectory(libs)
+
+# DSP, state, and voice engine only. Keep this target free of JUCE, plugin wrappers, UI sources,
+# embedded preset/theme resources, and editor dependencies: it is the source set shared by the
+# native plugin and the browser build.
+add_library(${PROJECT_NAME}-core STATIC
+        src/dsp/sintable.cpp
+
+        src/synth/synth.cpp
+        src/synth/voice.cpp
+        src/synth/patch.cpp
+        src/synth/mod_matrix.cpp
+        src/synth/macro_usage.cpp
+)
+target_include_directories(${PROJECT_NAME}-core PUBLIC src)
+target_link_libraries(${PROJECT_NAME}-core PUBLIC
+        clap
+        simde
+        mts-esp-client
+        fmt-header-only
+        sst-basic-blocks sst-voicemanager sst-cpputils sst-filters
+        sst-plugininfra
+        sst-plugininfra::filesystem
+        sst-plugininfra::tinyxml
+        sst-plugininfra::strnatcmp
+        sst-plugininfra::patchbase
+        sst-plugininfra::version_information
+        samplerate
+)
 
 add_library(${PROJECT_NAME}-impl STATIC
         src/clap/six-sines-clap.cpp
@@ -71,14 +105,6 @@ add_library(${PROJECT_NAME}-impl STATIC
         src/presets/preset-manager.cpp
         src/presets/ui-theme-manager.cpp
 
-        src/dsp/sintable.cpp
-
-        src/synth/synth.cpp
-        src/synth/voice.cpp
-        src/synth/patch.cpp
-        src/synth/mod_matrix.cpp
-        src/synth/macro_usage.cpp
-
 )
 target_include_directories(${PROJECT_NAME}-impl PUBLIC src)
 target_compile_definitions(${PROJECT_NAME}-impl PRIVATE
@@ -98,30 +124,27 @@ if (WIN32)
 endif()
 
 target_link_libraries(${PROJECT_NAME}-impl PUBLIC
-        clap
+        ${PROJECT_NAME}-core
 )
 target_link_libraries(${PROJECT_NAME}-impl PUBLIC  # PW change to public since we now have tests
-        simde
         clap-helpers clap-wrapper-extensions
-        mts-esp-client
-        fmt-header-only
-        sst-basic-blocks sst-voicemanager sst-jucegui sst-cpputils
-        sst-plugininfra
-        sst-plugininfra::filesystem
-        sst-plugininfra::tinyxml
-        sst-plugininfra::strnatcmp
-        sst-plugininfra::patchbase
-        sst-plugininfra::version_information
-        sst-filters
+        sst-jucegui
         sst::clap_juce_shim sst::clap_juce_shim_headers
         juce::juce_dsp
         ${PROJECT_NAME}-patches
         ${PROJECT_NAME}-themes
         ${PROJECT_NAME}-fonts
-        samplerate
 )
 
 target_compile_definitions(clap-wrapper-compile-options-public INTERFACE CLAP_WRAPPER_LOGLEVEL=0)
+
+# CLAP-shaped, UI-free public boundary. This is a separate target so native tests and the
+# Emscripten build can share the facade without making the desktop plugin depend on it.
+add_library(${PROJECT_NAME}-headless STATIC
+        src/headless/engine_facade.cpp
+)
+target_include_directories(${PROJECT_NAME}-headless PUBLIC src)
+target_link_libraries(${PROJECT_NAME}-headless PUBLIC ${PROJECT_NAME}-core)
 
 make_clapfirst_plugins(
         TARGET_NAME ${PROJECT_NAME}
@@ -167,8 +190,4 @@ add_clapfirst_installer(
 )
 
 add_subdirectory(tests EXCLUDE_FROM_ALL)
-
-
-
-
 

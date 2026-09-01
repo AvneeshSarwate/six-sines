@@ -39,6 +39,7 @@ struct MacroVoiceNode : EnvelopeSupport<Patch::MacroNode>,
     const Patch::MacroNode &macroNode;
     const MonoValues &monoValues;
     const VoiceValues &voiceValues;
+    const size_t macroIndex;
     const float &level;
     const float &macroPowerV; // mn.macroPower — distinct from EnvelopeSupport::powerV (envPower)
     const float &envDepth;
@@ -49,8 +50,8 @@ struct MacroVoiceNode : EnvelopeSupport<Patch::MacroNode>,
     bool macroPowerOn{false};
     bool wasPowerOn{false};
 
-    MacroVoiceNode(const Patch::MacroNode &mn, MonoValues &mv, const VoiceValues &vv)
-        : macroNode(mn), monoValues(mv), voiceValues(vv), level(mn.level),
+    MacroVoiceNode(const Patch::MacroNode &mn, MonoValues &mv, const VoiceValues &vv, size_t index)
+        : macroNode(mn), monoValues(mv), voiceValues(vv), macroIndex(index), level(mn.level),
           macroPowerV(mn.macroPower), envDepth(mn.envDepth), lfoDepth(mn.lfoDepth),
           lfoLevelMode(mn.lfoLevelMode), ModulationSupport(mn, this, mv, vv),
           EnvelopeSupport(mn, mv, vv), LFOSupport(mn, mv)
@@ -75,9 +76,10 @@ struct MacroVoiceNode : EnvelopeSupport<Patch::MacroNode>,
 
     void process()
     {
+        const auto perNoteLevelOffset = voiceValues.macroLevelModulationLag[macroIndex].v;
         if (!macroPowerOn)
         {
-            out = level;
+            out = std::clamp(level + perNoteLevelOffset, -1.f, 1.f);
             return;
         }
         calculateModulation();
@@ -89,7 +91,7 @@ struct MacroVoiceNode : EnvelopeSupport<Patch::MacroNode>,
         auto lfoOut = lfo.outputBlock[blockSize - 1];
         if (lfoIsEnveloped)
             lfoOut *= envOut;
-        auto amp = std::clamp(level + levMod, -1.f, 1.f);
+        auto amp = std::clamp(level + perNoteLevelOffset + levMod, -1.f, 1.f);
         // LFO->Level mode applied as base*lfoMul + lfoAdd (see MixerNode for the derivation),
         // with depth d = lfoDepth*lfoAtten. base is the non-LFO macro level.
         auto d = lfoDepth * lfoAtten;

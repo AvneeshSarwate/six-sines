@@ -303,6 +303,14 @@ struct SixSinesClap : public plugHelper_t, sst::clap_juce_shim::EditorProvider
             }
             break;
 
+            case CLAP_EVENT_PARAM_MOD:
+            {
+                auto mevt = reinterpret_cast<const clap_event_param_mod *>(nextEvent);
+                engine->handlePolyphonicParamMod(mevt->port_index, mevt->channel, mevt->key,
+                                                 mevt->note_id, mevt->param_id, mevt->amount);
+            }
+            break;
+
             case CLAP_EVENT_NOTE_EXPRESSION:
             {
                 auto nevt = reinterpret_cast<const clap_event_note_expression *>(nextEvent);

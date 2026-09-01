@@ -20,6 +20,7 @@
 #include <array>
 #include <unordered_map>
 #include <algorithm>
+#include <cassert>
 #include <string>
 #include <cstring>
 #include <clap/clap.h>
@@ -1392,6 +1393,20 @@ struct Patch : pats::PatchBase<Patch, Param>
     {
         static constexpr uint32_t idBase{40000}, idStride{250};
 
+        static bool isLevelParamId(uint32_t paramId)
+        {
+            if (paramId < idBase)
+                return false;
+            const auto offset = paramId - idBase;
+            return offset % idStride == 0 && offset / idStride < numMacros;
+        }
+
+        static size_t levelIndexForParamId(uint32_t paramId)
+        {
+            assert(isLevelParamId(paramId));
+            return (paramId - idBase) / idStride;
+        }
+
         enum TargetID : int32_t
         {
             SKIP = -1,
@@ -1413,6 +1428,8 @@ struct Patch : pats::PatchBase<Patch, Param>
                         .withName(name(idx) + " Level")
                         .withID(id(0, idx))
                         .withDefault(0)
+                        .withFlags(floatFlags | CLAP_PARAM_IS_MODULATABLE |
+                                   CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID)
                         .withFeature(isPrimaryMacroFeature)),
               macroPower(boolMd(version_120c)
                              .withGroupName(name(idx))

@@ -35,7 +35,9 @@ class TiXmlElement;
 #include "sst/voicemanager/voicemanager.h"
 #include "sst/cpputils/ring_buffer.h"
 
+#if !defined(SIX_SINES_PORTABLE)
 #include "filesystem/import.h"
+#endif
 
 #include "configuration.h"
 
@@ -43,7 +45,9 @@ class TiXmlElement;
 #include "synth/patch.h"
 #include "mono_values.h"
 #include "mod_matrix.h"
+#if !defined(SIX_SINES_PORTABLE)
 #include "ui/ui-defaults.h"
+#endif
 #include "sst/basic-blocks/dsp/LagCollection.h"
 
 namespace baconpaul::six_sines
@@ -113,12 +117,16 @@ struct Synth
         void setVoiceEndCallback(std::function<void(Voice *)> f) { doVoiceEndCallback = f; }
         void retriggerVoiceWithNewNoteID(Voice *v, int32_t nid, float vel)
         {
+            v->resetPerNoteMacroModulation();
+            v->voiceValues.firstBlockAfterAttack = true;
             v->voiceValues.setGated(true);
             v->voiceValues.velocity = vel;
             v->retriggerAllEnvelopesForReGate();
         }
         void moveVoice(Voice *v, uint16_t p, uint16_t c, uint16_t k, float ve)
         {
+            v->resetPerNoteMacroModulation();
+            v->voiceValues.firstBlockAfterAttack = true;
             v->setupPortaTo(k, synth.patch.output.portaTime.value);
             v->voiceValues.setKey(k);
             v->voiceValues.velocity = ve;
@@ -127,6 +135,8 @@ struct Synth
 
         void moveAndRetriggerVoice(Voice *v, uint16_t p, uint16_t c, uint16_t k, float ve)
         {
+            v->resetPerNoteMacroModulation();
+            v->voiceValues.firstBlockAfterAttack = true;
             v->setupPortaTo(k, synth.patch.output.portaTime.value);
             v->voiceValues.setKey(k);
             v->voiceValues.velocity = ve;
@@ -243,7 +253,13 @@ struct Synth
                 break;
             }
         }
-        void setVoicePolyphonicParameterModulation(Voice *, uint32_t, double) {}
+        void setVoicePolyphonicParameterModulation(Voice *v, uint32_t paramId, double value)
+        {
+            if (!Patch::MacroNode::isLevelParamId(paramId))
+                return;
+            const auto index = Patch::MacroNode::levelIndexForParamId(paramId);
+            v->voiceValues.macroLevelModulation[index] = static_cast<float>(value);
+        }
         void setVoiceMonophonicParameterModulation(Voice *, uint32_t, double) {}
         void setPolyphonicAftertouch(Voice *v, int8_t a) { v->voiceValues.polyAt = a / 127.0; }
 
@@ -399,6 +415,12 @@ struct Synth
     }
 
     void handleParamValue(Param *p, uint32_t pid, float value);
+    bool handlePolyphonicParamMod(int16_t port, int16_t channel, int16_t key, int32_t noteId,
+                                  uint32_t paramId, double amount);
+
+    // EngineFacade has no main/UI thread consuming audioToMain. It keeps parameter smoothing and
+    // audio-side effects but suppresses that otherwise-unbounded-for-a-headless-session echo.
+    bool suppressMainThreadParamEcho{false};
 
     // Every clap cookie we hand the host points into the audio-thread `patch`: the host hands
     // it back on param events, which we only ever resolve on the audio thread.
@@ -471,14 +493,17 @@ struct Synth
     // main/audio channel is the queue.
     AudioDawState audioDawState;
 
-    // User-defaults reader, owned by the engine so non-UI startup can seed the session state
-    // from saved preferences. Shared with the editor (by pointer) for read/write.
+#if !defined(SIX_SINES_PORTABLE)
+    // User-defaults reader, owned by the desktop engine so non-UI startup can seed the session
+    // state from saved preferences. Browser instances deliberately start from deterministic
+    // defaults and receive any instance state explicitly.
     std::unique_ptr<ui::defaultsProvder_t> defaultsProvider;
 
     // Resolve the Six Sines user documents folder. Prefers the legacy ~/Documents/SixSines when
     // it already exists; otherwise uses (and creates) the vendored BaconPaul/SixSines path. The
     // single source of truth for presets, themes, and user defaults. Empty on filesystem error.
     static fs::path userDocumentsPath();
+#endif
 
     // Stream / parse the <dawExtraState> block. Static and operate on a caller-held DawStateMain,
     // so they never implicitly touch engine state; the patchMain hooks pass `dawStateMain`. Both
