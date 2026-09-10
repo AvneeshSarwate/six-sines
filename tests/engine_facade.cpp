@@ -158,3 +158,32 @@ TEST_CASE("headless facade retains events across sub-block process calls", "[hea
                                *std::max_element(renderedRight.begin(), renderedRight.end()));
     REQUIRE(peak > 1e-5f);
 }
+
+TEST_CASE("raw MIDI forwards controllers and sustain through the plugin voice manager", "[headless][facade][midi]")
+{
+    headless::EngineFacade facade(48000.0);
+    std::vector<float> left(frames), right(frames);
+    auto midi = [](uint8_t status, uint8_t d1, uint8_t d2 = 0) {
+        return event(0, SX_EVENT_MIDI1, -1, -1,
+                     status | (uint32_t(d1) << 8) | (uint32_t(d2) << 16));
+    };
+    auto render = [&](sx_event message) {
+        REQUIRE(facade.process(frames, nullptr, nullptr, left.data(), right.data(), &message, 1));
+        return rms(left, frames / 2, frames);
+    };
+    REQUIRE(render(midi(0x92, 60, 100)) > 0.001);
+    render(midi(0xb2, 1, 100));
+    REQUIRE(facade.synth().monoValues.midiCC[1] == 100);
+    render(midi(0xd2, 90));
+    REQUIRE(facade.synth().monoValues.channelAT == Approx(90.f / 127.f).margin(.001));
+    render(midi(0xe2, 127, 127));
+    REQUIRE(facade.synth().monoValues.pitchBend > .9f);
+    render(midi(0xb2, 64, 127));
+    REQUIRE(render(midi(0x92, 60, 0)) > .001); // zero velocity note-off is held by pedal
+    render(midi(0xb2, 64, 0));
+    for (int i = 0; i < 20; ++i)
+        facade.process(frames, nullptr, nullptr, left.data(), right.data(), nullptr, 0);
+    REQUIRE(rms(left, frames / 2, frames) < .00001);
+    REQUIRE(render(midi(0x92, 60, 100)) > .001);
+    REQUIRE(render(midi(0xb2, 120, 0)) < .00001);
+}

@@ -12,6 +12,7 @@
 #include "configuration.h"
 #include "synth/patch.h"
 #include "synth/synth.h"
+#include "sst/voicemanager/midi1_to_voicemanager.h"
 
 namespace baconpaul::six_sines::headless
 {
@@ -91,6 +92,14 @@ void EngineFacade::dispatch(const sx_event &event)
     case SX_EVENT_ALL_NOTES_OFF:
         vm.allSoundsOff();
         break;
+    case SX_EVENT_MIDI1:
+    {
+        const uint8_t bytes[3]{static_cast<uint8_t>(event.param_id & 0xff),
+                               static_cast<uint8_t>((event.param_id >> 8) & 0x7f),
+                               static_cast<uint8_t>((event.param_id >> 16) & 0x7f)};
+        sst::voicemanager::applyMidi1Message(vm, event.port, bytes);
+        break;
+    }
     default:
         break;
     }

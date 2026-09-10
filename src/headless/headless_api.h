@@ -24,6 +24,8 @@ typedef enum sx_event_type
     SX_EVENT_PARAM_VALUE = 4,
     SX_EVENT_PARAM_MOD = 5,
     SX_EVENT_ALL_NOTES_OFF = 6,
+    /* MIDI 1 channel message: param_id packs status | data1 << 8 | data2 << 16. */
+    SX_EVENT_MIDI1 = 7,
 } sx_event_type;
 
 /*
