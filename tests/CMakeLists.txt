@@ -1,4 +1,9 @@
 # And finally the test suite
+if (APPLE)
+    add_executable(six-sines-ui-reference ui_reference.cpp)
+    target_link_libraries(six-sines-ui-reference PRIVATE six-sines-impl)
+endif()
+
 add_executable(six-sines-test
 		test_main.cpp
 

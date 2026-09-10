@@ -149,6 +149,9 @@ Synth::~Synth()
 #if !defined(SIX_SINES_PORTABLE)
 fs::path Synth::userDocumentsPath()
 {
+    // Opt-in isolation for the native UI reference harness and its preset/theme fixtures.
+    if (const auto *testPath = std::getenv("SIX_SINES_TEST_USER_DATA_DIR"); testPath && *testPath)
+        return fs::path(testPath);
     try
     {
         // 1.1 uses unvendor and 1.2 uses legacy. Since this is 1.2 if both exist use vendor.
