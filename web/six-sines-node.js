@@ -1,3 +1,4 @@
+// @ts-self-types="./six-sines-node.d.ts"
 const registeredWorklets = new WeakMap();
 
 export const SixSinesEventType = Object.freeze({

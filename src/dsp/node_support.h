@@ -616,7 +616,8 @@ template <typename Bundle, typename Node> struct ModulationSupport
         if (sv >= ModMatrixConfig::Source::MACRO_0 &&
             sv < ModMatrixConfig::Source::MACRO_0 + numMacros)
         {
-            sourcePointers[which] = monoValues.macroPtr[sv - ModMatrixConfig::Source::MACRO_0];
+            sourcePointers[which] =
+                &voiceValues.macroAmplitude[sv - ModMatrixConfig::Source::MACRO_0];
             return;
         }
 

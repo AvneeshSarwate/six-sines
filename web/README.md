@@ -82,6 +82,12 @@ The currently per-note-modulatable parameters are the six Macro Levels: `40000`,
 `noteId`; an unknown or retired note ID is ignored. CLAP note expressions retain their existing
 addressing semantics.
 
+Offsets affect both Macro **Amplitude** (clamped knob value plus per-note offset)
+and Macro **Modulated** (also includes that macro's envelope/LFO). They never
+change the global knob or saved preset. Set `SIX_SINES_MACRO_SOURCE=400` when
+running `direct-wasm-smoke.mjs` to test the Amplitude path; the default tests
+Modulated (410). The CMake direct-check target exercises both.
+
 ## Self-verification layers
 
 Verification is layered as follows. The paired build script runs gates 1–4 before packaging;

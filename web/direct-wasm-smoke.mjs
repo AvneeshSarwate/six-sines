@@ -8,6 +8,7 @@ const modulePath = process.argv[2];
 const presetPath = process.argv[3];
 const renderQuantum = Number(process.argv[4] ?? 24_576);
 const nativePcmPath = process.argv[5];
+const macroSource = Number(process.env.SIX_SINES_MACRO_SOURCE ?? 410);
 if (!modulePath) {
   throw new Error("usage: node web/direct-wasm-smoke.mjs /path/to/six-sines.js [preset.sxsnp]");
 }
@@ -90,7 +91,7 @@ try {
     makeEvent(0, EVENT.paramValue, { paramId: 522, value: 0 }),
     makeEvent(0, EVENT.paramValue, { paramId: 529, value: 0 }),
     makeEvent(0, EVENT.paramValue, { paramId: 532, value: 0 }),
-    makeEvent(0, EVENT.paramValue, { paramId: 620, value: 410 }),
+    makeEvent(0, EVENT.paramValue, { paramId: 620, value: macroSource }),
     makeEvent(0, EVENT.paramValue, { paramId: 621, value: 1 }),
     makeEvent(0, EVENT.paramValue, { paramId: 650, value: 10 }),
     makeEvent(512, EVENT.noteOn, { noteId: 101, key: 60, value: 0.8 }),
@@ -150,6 +151,7 @@ try {
   const unknownRight = rms(right, 19_456, 22_528);
   const report = {
     test: "macro-per-note-direct-wasm",
+    macro_source: macroSource,
     status: "pass",
     param_count: paramCount,
     per_note_parameter_count: discoveredPerNoteIds.size,
