@@ -13,7 +13,10 @@
     "predev": "npm run engine:sync",
     "prebuild": "npm run engine:sync",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "build:webcomponent": "vue-tsc -b && vite build --config vite.webcomponent.config.ts",
+    "sync:webcomponent": "node scripts/sync-webcomponent.mjs",
+    "test:webcomponent-build": "node scripts/test-webcomponent-build.mjs"
   },
   "dependencies": {
     "vue": "^3.5.42"

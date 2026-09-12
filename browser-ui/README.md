@@ -113,3 +113,70 @@ The editor also emits `parameters` (arrays of `{id, value}` deltas, including un
 ## Formatting
 
 Prettier formats Vue templates, TypeScript, CSS, scripts, and project configuration. Run `npm run format` to apply it or `npm run format:check` to verify it. Generated data, preset/assets directories, build output, and the package lockfile are excluded.
+
+## Custom element distribution
+
+`npm run build:webcomponent` creates `dist-webcomponent/six-sines-editor.js`, a
+self-contained ES module with Vue, shadow-root CSS, fonts, schema, Init, and the
+factory index bundled. It owns no audio instance. It mounts the same
+`SixSinesEditor.vue` used by the standalone app.
+
+```js
+import { registerSixSinesEditor } from './ui/six-sines-editor.js'
+
+registerSixSinesEditor() // Idempotent; importing alone does not register.
+const editor = document.createElement('six-sines-editor')
+editor.presetBaseUrl = '/six-sines-ui/'
+editor.addEventListener('parameters-change', ({ detail }) => {
+  // detail.changes: Array<{ id: number, value: number }>
+})
+editor.addEventListener('preset-change', ({ detail }) => {
+  // Persist both detail.preset (XML string) and detail.values (native values).
+})
+editor.loadPreset(saved.preset)
+editor.setParameters(
+  Object.entries(saved.values).map(([id, value]) => ({
+    id: Number(id),
+    value,
+  })),
+)
+document.body.append(editor)
+```
+
+Public methods work before connection and retain state across detach/reconnect:
+
+- `getPreset(): Uint8Array` exports the current complete native preset, including
+  metadata, unknown XML extensions, and current parameter values.
+- `getParameterValues(): Record<string, number>` returns a detached value snapshot.
+- `loadPreset(string | Uint8Array): void` silently replaces the preset and clears
+  undo history. Invalid XML throws without changing state.
+- `setParameters(Array<{ id: number, value: number }>): void` silently applies
+  native storage values to individual reactive entries. It creates no undo
+  snapshots, performs no UI clamping, and ignores unknown IDs/nonfinite values.
+- `presetBaseUrl` (also `preset-base-url`) controls factory fetches. A trailing slash
+  is added when needed. The default resolves beside the ES module.
+
+Both events are native, bubbling, composed `CustomEvent` instances.
+`parameters-change` has detail `{ changes }` for user parameter edits and undo/redo.
+`preset-change` has detail `{ preset: string, values: Record<string, number> }`
+for user import/library/reset and name/author/macro-name edits, including metadata
+undo/redo. Neither incoming method echoes either event. Existing Vue component
+`parameters`, `preset-load`, and `export` APIs remain available for standalone playback;
+the component's ordinary programmatic load still emits `preset-load`.
+
+The distribution also contains `six-sines-editor.d.ts`, `presets/` (216 factory
+files), `schema.json`, `init.sxsnp`, `presets.json`, and license notices. Only the
+factory files need runtime fetching; the other data are also bundled.
+
+`npm run sync:webcomponent` copies this output to
+`avTools/packages/six-sines/ui` in the sibling avTools checkout. An explicit
+destination can be supplied with `npm run sync:webcomponent -- /absolute/path`.
+The script copies only that UI distribution and never changes parent wrappers.
+For a parent Vite build, copy `packages/six-sines/ui/presets` to
+`dist/six-sines-ui/presets` and set `presetBaseUrl` to the corresponding public
+base (including the application's deployment prefix). Vite rebundling moves the
+module, so set the base explicitly in that case.
+
+Run `npm test` for model and real DOM element coverage, and
+`npm run test:webcomponent-build` after building to smoke-test the actual bundled
+ES module in jsdom without external Vue imports.
