@@ -24,3 +24,5 @@ public/engine/
 *.njsproj
 *.sln
 *.sw?
+
+dist-webcomponent/

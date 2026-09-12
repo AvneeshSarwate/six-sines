@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import { ref, watch } from 'vue'
-import { applyPatches, createTracked, type Patch } from '../../packages/tracked-state/src/index'
+import {
+  applyPatches,
+  createTracked,
+  type Patch,
+} from '../../../../avTools/packages/tracked-state/src/index'
 
 describe('tracked state Vue consumer', () => {
   test('raw external edits reach Vue through the same dirty-gated adapter', () => {

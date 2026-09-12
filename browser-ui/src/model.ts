@@ -199,6 +199,7 @@ export function createEditorStore(
   hooks: {
     parameters?: (changes: ParameterChange[]) => void
     preset?: (bytes: Uint8Array) => void
+    metadata?: (bytes: Uint8Array) => void
   } = {},
 ) {
   const state = reactive<State>(parsePreset(initXml))
@@ -239,10 +240,12 @@ export function createEditorStore(
   }
   function editMetadata(fn: () => void) {
     begin()
+    const before = snapshot()
     fn()
     end()
+    if (before !== snapshot()) hooks.metadata?.(exportPreset())
   }
-  function loadPreset(input: string | Uint8Array) {
+  function loadPreset(input: string | Uint8Array, options: { silent?: boolean } = {}) {
     const parsed = parsePreset(typeof input === 'string' ? input : new TextDecoder().decode(input))
     Object.assign(state, parsed)
     dirty.value = false
@@ -251,16 +254,31 @@ export function createEditorStore(
     transactionDepth = 0
     undoStack.value = []
     redoStack.value = []
-    hooks.preset?.(exportPreset())
+    if (!options.silent) hooks.preset?.(exportPreset())
   }
+  // Host values are native storage values: preserve them without UI clamping.
+  // This path deliberately does not snapshot, emit, or mark the patch dirty.
+  function setParameters(changes: ParameterChange[]) {
+    for (const { id, value } of changes) {
+      if (Number.isInteger(id) && Number.isFinite(value) && byId.has(id)) {
+        state.values[id] = value
+      }
+    }
+  }
+  const getParameterValues = (): Record<string, number> => ({ ...state.values })
   const exportPreset = () => new TextEncoder().encode(serializePreset(state))
   function restore(saved: string) {
     const next = JSON.parse(saved) as State
     const changes = Object.entries(next.values)
       .filter(([id, v]) => state.values[Number(id)] !== v)
       .map(([id, value]) => ({ id: Number(id), value }))
+    const metadataChanged =
+      state.name !== next.name ||
+      state.author !== next.author ||
+      state.macros.some((name, i) => name !== next.macros[i])
     Object.assign(state, next)
-    hooks.parameters?.(changes)
+    if (changes.length) hooks.parameters?.(changes)
+    if (metadataChanged) hooks.metadata?.(exportPreset())
   }
   function undo() {
     const s = undoStack.value.pop()
@@ -313,6 +331,8 @@ export function createEditorStore(
     end,
     editMetadata,
     loadPreset,
+    setParameters,
+    getParameterValues,
     exportPreset,
     undo,
     redo,

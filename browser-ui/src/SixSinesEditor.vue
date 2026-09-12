@@ -8,6 +8,7 @@ import {
   node,
   readDisplay,
   type Node,
+  type EditorStore,
   type ParameterChange,
 } from './model'
 import presets from './data/presets.json'
@@ -16,7 +17,13 @@ import PlaySettings from './components/PlaySettings.vue'
 import MatrixMode from './components/MatrixMode.vue'
 import Inspector from './components/Inspector.vue'
 const props = withDefaults(
-  defineProps<{ playable?: boolean; presetBaseUrl?: string; downloadOnExport?: boolean }>(),
+  defineProps<{
+    playable?: boolean
+    presetBaseUrl?: string
+    downloadOnExport?: boolean
+    editorStore?: EditorStore
+    localKeyboard?: boolean
+  }>(),
   { downloadOnExport: true },
 )
 const emit = defineEmits<{
@@ -24,10 +31,12 @@ const emit = defineEmits<{
   parameters: [changes: ParameterChange[]]
   presetLoad: [bytes: Uint8Array]
 }>()
-const s = createEditorStore({
-  parameters: (changes) => emit('parameters', changes),
-  preset: (bytes) => emit('presetLoad', bytes),
-})
+const s =
+  props.editorStore ??
+  createEditorStore({
+    parameters: (changes) => emit('parameters', changes),
+    preset: (bytes) => emit('presetLoad', bytes),
+  })
 provide(editorKey, s)
 const { state, selection, dirty, error, notice, canUndo, canRedo } = s
 const library = ref(false),
@@ -168,14 +177,22 @@ function keyboard(e: KeyboardEvent) {
     e.shiftKey ? s.redo() : s.undo()
   }
 }
-onMounted(() => window.addEventListener('keydown', keyboard))
+onMounted(() => {
+  if (!props.localKeyboard) window.addEventListener('keydown', keyboard)
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', keyboard))
-defineExpose({ loadPreset: s.loadPreset, exportPreset: s.exportPreset })
+defineExpose({
+  loadPreset: s.loadPreset,
+  exportPreset: s.exportPreset,
+  setParameters: s.setParameters,
+  getParameterValues: s.getParameterValues,
+})
 </script>
 <template>
   <main
     class="workspace"
     :data-theme="theme"
+    @keydown="props.localKeyboard && keyboard($event)"
     @dragover.prevent
     @drop.prevent="onDrop"
   >
