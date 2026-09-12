@@ -94,7 +94,7 @@ TEST_CASE("headless C ABI routes independent macro modulation by note id", "[hea
     param(522, 0.0);   // velocity sensitivity
     param(529, 0.0);   // repeated keys create independent voices
     param(532, 0.0);   // deterministic unison phase
-    param(620, 410.0); // Macro 1 Modulated
+    param(620, GENERATE(400.0, 410.0)); // Macro 1 Amplitude and Modulated
     param(621, 1.0);   // modulation depth
     param(650, 10.0);  // output amplitude target
 

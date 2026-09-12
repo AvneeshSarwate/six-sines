@@ -249,3 +249,30 @@ TEST_CASE("voice cleanup and reuse clear macro modulation", "[macro_mod][lifecyc
     synth->process(nullptr);
     REQUIRE(originalVoice->voiceValues.macroLevelModulationLag[0].v == 0.f);
 }
+
+TEST_CASE("raw macro sources include host offsets without macro envelopes",
+          "[macro_mod][dsp]")
+{
+    auto synth = bringUpSynth();
+    auto &macro = synth->patch.macroNodes[0];
+    macro.level.value = 0.2f;
+    macro.macroPower.value = 1.f;
+    macro.lfoDepth.value = 0.f;
+    macro.envPower.value = 1.f;
+    macro.envIsMultiplcative.value = 1.f;
+    macro.sustain.value = 0.5f;
+    macro.delay.value = macro.attack.value = macro.hold.value = macro.decay.value = 0.f;
+
+    synth->voiceManager->processNoteOnEvent(0, 0, 60, 901, 0.8f, 0.f);
+    auto *voice = synth->head;
+    // Raw sources are also correct for envelope/LFO settings read at attack.
+    REQUIRE(voice->voiceValues.macroAmplitude[0] == Approx(0.2f));
+    REQUIRE(synth->handlePolyphonicParamMod(0, 0, 60, 901, macroLevelId(0), 0.3));
+    synth->process(nullptr);
+    REQUIRE(voice->voiceValues.macroAmplitude[0] == Approx(0.5f));
+    REQUIRE(voice->voiceValues.macroOut[0] == Approx(0.25f).margin(1e-5));
+    REQUIRE(macro.level.value == Approx(0.2f));
+
+    synth->voiceManager->processNoteOnEvent(0, 0, 62, 902, 0.8f, 0.f);
+    REQUIRE(synth->head->voiceValues.macroAmplitude[0] == Approx(0.2f));
+}

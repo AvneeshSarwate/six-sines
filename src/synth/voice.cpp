@@ -78,6 +78,10 @@ void Voice::attack()
         mpeLagMs, monoValues.sr.sampleRate, 1.0 / blockSize);
 
     resetPerNoteMacroModulation();
+    // Attack-time envelope/LFO settings can read raw macro sources before the
+    // first render block. A reused voice must not expose its previous note.
+    for (int m = 0; m < numMacros; ++m)
+        voiceValues.macroAmplitude[m] = *monoValues.macroPtr[m];
     for (auto &lag : voiceValues.macroLevelModulationLag)
         lag.setRateInMilliseconds(monoValues.paramAutomationSmoothingTimeMs,
                                   monoValues.sr.sampleRate, 1.0 / blockSize);
@@ -200,6 +204,13 @@ void Voice::renderBlock()
     voiceValues.velocityLag.setTarget(voiceValues.velocity);
     voiceValues.velocityLag.process();
 
+    // Populate all raw sources before processing any macro: a macro may read
+    // another macro's amplitude regardless of their processing order.
+    for (int m = 0; m < numMacros; ++m)
+        voiceValues.macroAmplitude[m] =
+            std::clamp(*monoValues.macroPtr[m] + voiceValues.macroLevelModulationLag[m].v,
+                       -1.f, 1.f);
+
     for (int m = 0; m < numMacros; ++m)
     {
         auto &mn = macroNode[m];
@@ -216,9 +227,7 @@ void Voice::renderBlock()
         }
         else
         {
-            voiceValues.macroOut[m] =
-                std::clamp(*monoValues.macroPtr[m] + voiceValues.macroLevelModulationLag[m].v,
-                           -1.f, 1.f);
+            voiceValues.macroOut[m] = voiceValues.macroAmplitude[m];
         }
         mn.wasPowerOn = mn.macroPowerOn;
     }

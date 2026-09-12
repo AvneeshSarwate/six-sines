@@ -106,6 +106,12 @@ if(SIX_SINES_NODE_EXECUTABLE)
                     "$<TARGET_FILE:six-sines-web>"
                     "${CMAKE_CURRENT_SOURCE_DIR}/resources/factory_patches/Templates/INIT Sine.sxsnp"
                     128
+            COMMAND "${CMAKE_COMMAND}" -E env SIX_SINES_MACRO_SOURCE=400
+                    "${SIX_SINES_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/web/direct-wasm-smoke.mjs"
+                    "$<TARGET_FILE:six-sines-web>"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/resources/factory_patches/Templates/INIT Sine.sxsnp"
+                    128
             DEPENDS six-sines-web
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             USES_TERMINAL

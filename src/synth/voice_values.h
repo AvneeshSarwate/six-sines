@@ -91,6 +91,8 @@ struct VoiceValues
     std::array<sst::basic_blocks::dsp::OnePoleLag<float, false>, numMacros>
         macroLevelModulationLag{};
 
+    // Raw knob plus host per-note offset, before the macro's envelope/LFO.
+    std::array<float, numMacros> macroAmplitude{};
     std::array<float, numMacros> macroOut{};
 
   private:
