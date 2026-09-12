@@ -11,7 +11,9 @@
     "engine:build": "bash ../scripts/build-ui-engine.sh",
     "engine:sync": "node scripts/sync-engine.mjs",
     "predev": "npm run engine:sync",
-    "prebuild": "npm run engine:sync"
+    "prebuild": "npm run engine:sync",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "vue": "^3.5.42"
@@ -21,6 +23,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
     "jsdom": "^30.0.1",
+    "prettier": "3.9.6",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.0",

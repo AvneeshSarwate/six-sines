@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-ssr/
+output/
+public/
+src/data/
+package-lock.json
