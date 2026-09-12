@@ -109,3 +109,7 @@ Schema, Init, presets, and layout derive from Six Sines by Paul Walker and contr
 The structural parity follow-up adds nine rendered-component regression tests covering Extend Mode visibility, Noise N/LFSR gating, pitch/Audio In restrictions, step counts, trigger choices, mixer/tuning/pan depths, grouped settings, and RM rescaling. See [the parity audit](./PARITY.md). Host-only MPE and automation smoothing settings are intentionally outside this preset-file component.
 
 The editor also emits `parameters` (arrays of `{id, value}` deltas, including undo/redo) and `preset-load` (canonical preset bytes on import/library/New/programmatic load). The playground uses these events to drive the engine. Set `playable` only to change the component’s help/badge for an audio-enabled host.
+
+## Formatting
+
+Prettier formats Vue templates, TypeScript, CSS, scripts, and project configuration. Run `npm run format` to apply it or `npm run format:check` to verify it. Generated data, preset/assets directories, build output, and the package lockfile are excluded.
