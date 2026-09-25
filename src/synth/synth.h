@@ -257,6 +257,22 @@ struct Synth
             case CLAP_NOTE_EXPRESSION_PAN:
                 v->voiceValues.noteExpressionPanBipolar = 2 * val - 1;
                 break;
+            // Pressure and brightness drive the same per-voice values as the MIDI MPE dialect's
+            // channel pressure and CC74, so the MPE Pressure / Timbre / Timbre (Bipolar) mod
+            // sources respond to per-note expressions without MPE mode. That mode lives in host
+            // (DAW) state, which headless hosts such as the browser port cannot set. Values are
+            // CLAP's 0..1; bipolar timbre uses the MIDI mapping (64/127 -> 0) for parity.
+            case CLAP_NOTE_EXPRESSION_PRESSURE:
+                v->voiceValues.mpePressure = static_cast<float>(std::clamp(val, 0.0, 1.0));
+                break;
+            case CLAP_NOTE_EXPRESSION_BRIGHTNESS:
+            {
+                const auto b = std::clamp(val, 0.0, 1.0);
+                v->voiceValues.mpeTimbre = static_cast<float>(b);
+                v->voiceValues.mpeTimbreBipolar =
+                    static_cast<float>(std::clamp((b * 127.0 - 64.0) / 63.0, -1.0, 1.0));
+                break;
+            }
             default:
                 break;
             }
