@@ -54,6 +54,7 @@ const groups = [
       [554, 'Bit Depth'],
       [555, 'High Pass'],
       [556, 'Gain'],
+      [559, '<= 1.2 dsp'],
     ],
   },
 ] as { name: string; fields: [number, string][] }[]

@@ -94,7 +94,7 @@ test('source pitch and Audio In follow native enabling rules', async () => {
   await set('Keytrack Frequency is Low Frequency', 1)
   expect(control('Absolute Frequency at Ratio=1')).toBeNull()
   expect(control('Keytrack Frequency at Ratio=1 (Low Frequency)')).not.toBeNull()
-  await set('Waveform', 21)
+  await set('Waveform', 22)
   expect((control('Extended Mode') as HTMLSelectElement).disabled).toBe(true)
   expect(root.querySelector('.modulator-pair')?.hasAttribute('inert')).toBe(true)
 })

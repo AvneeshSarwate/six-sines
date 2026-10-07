@@ -2,12 +2,20 @@
 import { computed, inject } from 'vue'
 import { editorKey, field } from '../model'
 import tables from '../data/waveforms.json'
+import { useOperatorTable } from '../useWavetable'
+import { AUDIO_IN, sampleWavetable, USER_TABLE } from '../wavetable'
 const props = defineProps<{ extended?: boolean }>()
 const s = inject(editorKey)!,
   n = s.selection
 const v = (name: string) => s.state.values[field(n.value, name)!.id]!
+const table = useOperatorTable(s, n)
 const wrap = (p: number) => p - Math.floor(p)
-function wave(id: number, p: number) {
+function wave(id: number, p: number): number {
+  // a node naming a wavetable it has not got (yet) draws the sine it will sound as
+  if (id === USER_TABLE) {
+    const frames = table.value?.frames
+    return frames?.length ? sampleWavetable(frames, v('Wavetable Morph'), wrap(p)) : wave(0, p)
+  }
   const t = (tables as Record<string, number[]>)[id] ?? tables['0']
   const x = wrap(p) * t.length,
     i = Math.floor(x)
@@ -72,7 +80,7 @@ const paths = computed(() => {
     let y = wave(wf, p)
     if (mode.value === 1) {
       const r = remap(p, m, v('Phase Map Shape'))
-      y = wave(wf, r)
+      y = wave(wf, r + v('Phase Map Read Phase'))
       mapping.push(remap(t, m, v('Phase Map Shape')) * 2 - 1)
     }
     if (mode.value === 2) {
@@ -153,7 +161,7 @@ const paths = computed(() => {
         class="wave-grid"
       />
       <text
-        v-if="v('Waveform') === 21"
+        v-if="v('Waveform') === AUDIO_IN"
         x="128"
         y="52"
         text-anchor="middle"

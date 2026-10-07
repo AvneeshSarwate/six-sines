@@ -2,6 +2,7 @@
 import { computed, inject, ref, watch } from 'vue'
 import { byId, editorKey, field, schema, type Choice } from '../model'
 import ParamField from './ParamField.vue'
+import { AUDIO_IN } from '../wavetable'
 import Knob from './Knob.vue'
 import SourceControls from './SourceControls.vue'
 import NodeControls from './NodeControls.vue'
@@ -15,8 +16,8 @@ const v = (suffix: string) => {
 }
 const audioIn = computed(
   () =>
-    (n.value.kind === 'source' && v('Waveform') === 21) ||
-    (n.value.kind === 'feedback' && n.value.index === 0 && s.state.values[1505] === 21),
+    (n.value.kind === 'source' && v('Waveform') === AUDIO_IN) ||
+    (n.value.kind === 'feedback' && n.value.index === 0 && s.state.values[1505] === AUDIO_IN),
 )
 const nodeDisabled = computed(() => audioIn.value || (n.value.kind === 'macro' && !v('Power')))
 const targetAvailable = (id: number) =>

@@ -1,6 +1,7 @@
 import { computed, reactive, ref, type InjectionKey } from 'vue'
 import rawSchema from './data/schema.json'
 import initXml from './data/init.sxsnp?raw'
+import { attachWavetable, detachWavetable, parseWavetable, USER_TABLE } from './wavetable'
 export interface Choice {
   value: number
   label: string
@@ -109,7 +110,7 @@ export function parsePreset(xml: string): State {
     seen.add(id)
     values[id] = v
   }
-  // Mirrors native Patch migration rules for versions 3–12.
+  // Mirrors native Patch migration rules for versions 3–14.
   if (version <= 3 && values[523]! > 0) values[523] = 1
   if (version === 5 && values[527] === 2) values[527] = 3
   if (version === 6 && values[527] === 1) values[527] = 0
@@ -132,6 +133,11 @@ export function parsePreset(xml: string): State {
       if (v > 3) v++
       values[wf.id] = ({ 6: 13, 8: 14, 10: 15, 12: 16 } as Record<number, number>)[v] ?? v
     }
+    // Version 13 inserted Wavetable before Audio In, moving Audio In from 21 to 22.
+    if (n.kind === 'source' && version < 13) {
+      const wf = field(n, 'Waveform')!
+      if (values[wf.id] === 21) values[wf.id] = 22
+    }
     if (version <= 11) {
       const shape = field(n, 'LFO Shape'),
         deform = field(n, 'LFO Deform')
@@ -139,6 +145,8 @@ export function parsePreset(xml: string): State {
     }
   }
   if (version <= 10) values[557] = 0
+  // Pre-14 patches were voiced through 1.2's DSP; native keeps them that way.
+  if (version <= 13) values[559] = 1
   const macros = Array.from(
     { length: 6 },
     (_, i) =>
@@ -155,7 +163,7 @@ export function parsePreset(xml: string): State {
 export function serializePreset(state: State): string {
   const doc = new DOMParser().parseFromString(state.xml, 'application/xml'),
     root = doc.documentElement
-  root.setAttribute('version', String(Math.max(12, Number(root.getAttribute('version')))))
+  root.setAttribute('version', String(Math.max(14, Number(root.getAttribute('version')))))
   root.setAttribute('name', state.name)
   root.setAttribute('author', state.author)
   let params = root.querySelector(':scope > params')
@@ -276,9 +284,14 @@ export function createEditorStore(
       state.name !== next.name ||
       state.author !== next.author ||
       state.macros.some((name, i) => name !== next.macros[i])
+    const tablesChanged = state.xml !== next.xml
     Object.assign(state, next)
-    if (changes.length) hooks.parameters?.(changes)
-    if (metadataChanged) hooks.metadata?.(exportPreset())
+    // Wavetables live in the XML rather than in values, so only a preset reload carries them.
+    if (tablesChanged) hooks.preset?.(exportPreset())
+    else {
+      if (changes.length) hooks.parameters?.(changes)
+      if (metadataChanged) hooks.metadata?.(exportPreset())
+    }
   }
   function undo() {
     const s = undoStack.value.pop()
@@ -295,6 +308,31 @@ export function createEditorStore(
       restore(s)
       dirty.value = true
     }
+  }
+  const waveformId = (op: number) => field(node('source', op), 'Waveform')!.id
+  // Loading a file is a preset change: the table travels in the XML exactly as native saves
+  // it, and the host reloads the engine (native-format bytes, no separate wavetable channel).
+  async function loadWavetable(op: number, bytes: Uint8Array, name: string) {
+    const parsed = parseWavetable(bytes)
+    if (parsed.error) {
+      error.value = `Could not load wavetable: ${parsed.error}`
+      return false
+    }
+    const xml = await attachWavetable(serializePreset(state), op, bytes, name)
+    begin()
+    state.xml = xml
+    state.values[waveformId(op)] = USER_TABLE
+    end()
+    error.value = ''
+    hooks.preset?.(exportPreset())
+    return true
+  }
+  function clearWavetable(op: number) {
+    begin()
+    state.xml = detachWavetable(serializePreset(state), op)
+    state.values[waveformId(op)] = 0
+    end()
+    hooks.preset?.(exportPreset())
   }
   function assign(n: Node, slot: number, source: number) {
     begin()
@@ -338,6 +376,8 @@ export function createEditorStore(
     redo,
     assign,
     uses,
+    loadWavetable,
+    clearWavetable,
     canUndo: computed(() => undoStack.value.length > 0),
     canRedo: computed(() => redoStack.value.length > 0),
     reset: () => loadPreset(initXml),

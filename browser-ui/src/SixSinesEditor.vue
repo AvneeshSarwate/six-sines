@@ -12,6 +12,7 @@ import {
   type ParameterChange,
 } from './model'
 import presets from './data/presets.json'
+import { AUDIO_IN } from './wavetable'
 import Knob from './components/Knob.vue'
 import PlaySettings from './components/PlaySettings.vue'
 import MatrixMode from './components/MatrixMode.vue'
@@ -88,7 +89,7 @@ function ratioChanged(e: Event, i: number) {
   input.value = (2 ** val(id)).toFixed(4)
 }
 function sourceAudioIn(i: number) {
-  return val(1505 + (i - 1) * 250) === 21
+  return val(1505 + (i - 1) * 250) === AUDIO_IN
 }
 function activeId(n: Node) {
   return field(n, 'Active')?.id ?? field(n, 'Power')?.id ?? 0

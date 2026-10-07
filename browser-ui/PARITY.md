@@ -37,7 +37,21 @@ Luna performed read-only audits of the non-source panels and Settings. Findings 
 
 The native harness now accepts `{"op":"source","index":0}`, `{"op":"set","id":1675,"value":1}`, and `{"op":"waveforms"}` for repeatable panel captures and preview-data generation. `set` changes the test patch, not a production plugin instance.
 
-## Remaining differences
+## Upstream 1.3 additions (rebased onto baconpaul/six-sines `03f3b9a`)
+
+Schema, Init, waveforms, and the 216-preset migration oracle were regenerated from the native harness (2,591 parameters, patch version 14).
+
+| Area                 | Browser behavior / native reference                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LFO run mode         | RndVc / RndNt come from the regenerated schema options. `lfo-components.h`                                                                                                                                                                                                                                                                                                                             |
+| Phase Map read phase | θ off slider with 0, π/4, π/2 jumps under the Phase Map shapes; previews read the table at the remapped phase plus the offset. `source-sub-panel.cpp:940`                                                                                                                                                                                                                                              |
+| Legacy DSP           | `<= 1.2 dsp` in Settings → Output Stage after Gain. Pre-14 patches load with it on, as native migrates them. `playmode-sub-panel.cpp:441`                                                                                                                                                                                                                                                              |
+| Waveform values      | Wavetable inserted at 21; Audio In moved to 22, with the native pre-13 remap in the importer. `patch.cpp:236`                                                                                                                                                                                                                                                                                          |
+| Wavetable            | Waveform menu entry reads "Wavetable (Sine to Saw)" or the loaded table's name. Plot draws the table at the current morph; morph slider plus env/lfo knobs appear only for multi-frame tables. Playback and Mip Chain (disabled for Direct modes) follow the native Playback submenu. Load Wavetable… (file picker, `.wt`/`.wav`) and Clear match the menu items. `source-sub-panel.cpp:1688`, `:1480` |
+
+Loading a table writes it into the preset XML exactly as native saves it (`<wavetables>` deflate-base64 blobs deduplicated by content, `<sourceWavetables>` references) and emits a preset change, so hosts reload the engine and persist the table with the preset. Undo/redo of a load or clear also reloads. The browser parser mirrors `wavetable_io.cpp` so files the engine would reject show the same error.
+
+Not reproduced: browsing installed Surge/Serum/Bitwig libraries, the user Wavetables folder, and the prev/next file jog. They walk the local filesystem.
 
 - Noise preview is a deterministic illustration rather than a port of the native noise filters/RNG. Phase-map and resonant previews use sampled native waveforms with floating-point versions of the native mappings; they are visualizations, not a second audio engine.
 - The native smoothed step-curve overlay is not implemented; step values, count, cycle, deform, and routing remain editable and serialize natively.

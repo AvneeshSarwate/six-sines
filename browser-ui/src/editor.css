@@ -1096,6 +1096,45 @@ summary::-webkit-details-marker {
 .source-wave {
   min-width: 0;
 }
+.wave-with-morph {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+}
+.morph-depths {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.source-primary .morph-depths .knob-wrap {
+  width: 34px;
+}
+.wavetable-tools {
+  font-size: 10px;
+  margin-top: 4px;
+}
+.wavetable-name {
+  margin: 2px 0 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.wavetable-name.error {
+  color: var(--accent);
+}
+.wavetable-buttons {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.wavetable-buttons button {
+  font-size: 10px;
+  padding: 2px 5px;
+}
+.choice-buttons.read-phase-jumps {
+  flex-direction: row;
+  margin-top: 4px;
+}
 .source-primary .param-field {
   display: block;
   font-size: 10px;

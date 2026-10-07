@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { editorKey, field } from '../model'
+import { useOperatorTable } from '../useWavetable'
+import { AUDIO_IN, USER_TABLE, wavetableFor } from '../wavetable'
 import Knob from './Knob.vue'
 import ParamField from './ParamField.vue'
 import SourceWave from './SourceWave.vue'
@@ -8,13 +10,48 @@ const s = inject(editorKey)!
 const n = s.selection
 const f = (name: string) => field(n.value, name)!
 const v = (name: string) => s.state.values[f(name).id]!
-const audioIn = computed(() => v('Waveform') === 21)
+const audioIn = computed(() => v('Waveform') === AUDIO_IN)
 const mode = computed(() => v('Extended Mode'))
 const noiseN = computed(() => [2, 3].includes(v('Noise Type')))
 const unison = computed(() => s.state.values[530]! > 1)
+const table = useOperatorTable(s, n)
+// A loaded table stays referenced after switching away, so it can be selected again.
+const loaded = computed(() => wavetableFor(s.state.xml, n.value.index))
+const onWavetable = computed(() => v('Waveform') === USER_TABLE)
+// Morph only means something with more than one frame; native hides it otherwise.
+const showMorph = computed(() => (table.value?.frames.length ?? 0) > 1)
+const direct = computed(() => [2, 3].includes(v('Wavetable Playback')))
 const waveChoices = computed(() =>
-  f('Waveform').options.filter((o) => n.value.index === 0 || o.value !== 21),
+  f('Waveform')
+    .options.filter((o) => n.value.index === 0 || o.value !== AUDIO_IN)
+    .map((o) =>
+      o.value !== USER_TABLE
+        ? o
+        : {
+            ...o,
+            label: loaded.value
+              ? `Wavetable: ${loaded.value.name || '(unnamed)'}`
+              : 'Wavetable (Sine to Saw)',
+          },
+    ),
 )
+const fileInput = ref<HTMLInputElement>()
+async function pickWavetable(e: Event) {
+  const input = e.target as HTMLInputElement,
+    file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  await s.loadWavetable(
+    n.value.index,
+    new Uint8Array(await file.arrayBuffer()),
+    file.name.replace(/\.[^.]+$/, ''),
+  )
+}
+const readPhaseJumps = [
+  { value: 0, label: '0' },
+  { value: 0.25, label: 'π/4' },
+  { value: 0.5, label: 'π/2' },
+]
 </script>
 
 <template>
@@ -100,12 +137,83 @@ const waveChoices = computed(() =>
       </section>
       <section class="source-wave">
         <h3>Wave</h3>
-        <SourceWave />
+        <div :class="{ 'wave-with-morph': showMorph }">
+          <SourceWave />
+          <div
+            v-if="showMorph"
+            class="morph-depths"
+          >
+            <Knob
+              :id="f('Env to Wavetable Morph').id"
+              label="env"
+            />
+            <Knob
+              :id="f('LFO to Wavetable Morph').id"
+              label="lfo"
+            />
+          </div>
+        </div>
+        <ParamField
+          v-if="showMorph"
+          :param="f('Wavetable Morph')"
+          label="morph"
+        />
         <ParamField
           :param="f('Waveform')"
           :choices="waveChoices"
           label="Waveform"
         />
+        <div
+          class="wavetable-tools"
+          aria-label="Wavetable"
+        >
+          <p
+            v-if="table"
+            class="wavetable-name"
+            :class="{ error: table.error }"
+          >
+            {{
+              table.error
+                ? 'Failed: ' + table.error
+                : `${table.name || '(unnamed)'} · ${table.frames.length} ${table.frames.length === 1 ? 'frame' : 'frames'}`
+            }}
+          </p>
+          <div class="wavetable-buttons">
+            <button
+              type="button"
+              @click="fileInput?.click()"
+            >
+              Load Wavetable…
+            </button>
+            <button
+              type="button"
+              :disabled="!loaded"
+              @click="s.clearWavetable(n.index)"
+            >
+              Clear
+            </button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".wt,.wav"
+              hidden
+              @change="pickWavetable"
+            />
+          </div>
+          <template v-if="onWavetable || loaded">
+            <ParamField
+              :param="f('Wavetable Playback')"
+              label="Playback"
+              :disabled="!onWavetable"
+            />
+            <ParamField
+              :param="f('Wavetable Mip Chain')"
+              label="Mip Chain"
+              toggle
+              :disabled="!onWavetable || direct"
+            />
+          </template>
+        </div>
         <ParamField
           :param="f('Phase')"
           label="φ"
@@ -133,13 +241,35 @@ const waveChoices = computed(() =>
         :class="{ 'noise-body': mode === 3 }"
       >
         <div class="extend-options">
-          <ParamField
-            v-if="mode === 1"
-            :param="f('Phase Map Shape')"
-            label="Phase Map"
-            :disabled="audioIn"
-            buttons
-          />
+          <template v-if="mode === 1">
+            <ParamField
+              :param="f('Phase Map Shape')"
+              label="Phase Map"
+              :disabled="audioIn"
+              buttons
+            />
+            <ParamField
+              :param="f('Phase Map Read Phase')"
+              label="θ off"
+              :disabled="audioIn"
+            />
+            <div
+              class="choice-buttons read-phase-jumps"
+              role="group"
+              aria-label="Phase Map Read Phase presets"
+            >
+              <button
+                v-for="j in readPhaseJumps"
+                :key="j.label"
+                type="button"
+                :disabled="audioIn"
+                :class="{ chosen: Math.abs(v('Phase Map Read Phase') - j.value) < 1e-6 }"
+                @click="s.set(f('Phase Map Read Phase').id, j.value)"
+              >
+                {{ j.label }}
+              </button>
+            </div>
+          </template>
           <template v-if="mode === 2">
             <ParamField
               :param="f('Resonant Sweep Window')"
