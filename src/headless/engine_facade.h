@@ -43,11 +43,15 @@ class EngineFacade
   private:
     static constexpr uint32_t pendingEventCapacity{4096};
     void dispatch(const sx_event &event);
+    // Wavetables are built from patchMain on the main thread; a headless engine has no editor
+    // idle to do that, so the facade reconciles itself whenever a load or edit could change one.
+    void reconcileWavetablesIfNeeded();
 
     std::unique_ptr<Synth> engine;
     uint32_t blockPosition{0};
     std::array<sx_event, pendingEventCapacity> pendingEvents{};
     uint32_t pendingEventCount{0};
+    bool wavetablesDirty{true};
 };
 } // namespace headless
 } // namespace baconpaul::six_sines

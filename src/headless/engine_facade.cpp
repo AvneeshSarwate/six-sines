@@ -35,6 +35,8 @@ bool EngineFacade::loadPreset(std::string_view utf8State)
     engine->patchMain.copyValuesFrom(*loaded);
     engine->patch.copyValuesFrom(*loaded);
     engine->postLoad();
+    wavetablesDirty = true;
+    reconcileWavetablesIfNeeded();
     blockPosition = 0;
     pendingEventCount = 0;
     return true;
@@ -83,6 +85,20 @@ void EngineFacade::dispatch(const sx_event &event)
         auto found = engine->patch.paramMap.find(event.param_id);
         if (found != engine->patch.paramMap.end())
             engine->handleParamValue(found->second, event.param_id, static_cast<float>(event.value));
+        // The waveform and playback mode pick and shape the table, and the reconcile reads them
+        // from patchMain, which the suppressed main-thread echo would otherwise leave stale.
+        for (auto &sn : engine->patchMain.sourceNodes)
+        {
+            for (auto *p : {&sn.waveForm, &sn.wavetableBandLimit, &sn.wavetableMipChain})
+            {
+                if (p->meta.id == event.param_id)
+                {
+                    p->value = static_cast<float>(event.value);
+                    wavetablesDirty = true;
+                }
+            }
+        }
+        reconcileWavetablesIfNeeded();
         break;
     }
     case SX_EVENT_PARAM_MOD:
@@ -131,6 +147,7 @@ bool EngineFacade::process(uint32_t frames, const float *inputLeft, const float 
             pendingEventCount = 0;
             while (nextEvent < eventCount && events[nextEvent].frame <= frame)
                 dispatch(events[nextEvent++]);
+            reconcileWavetablesIfNeeded();
             engine->process(nullptr);
         }
 
@@ -146,6 +163,19 @@ bool EngineFacade::process(uint32_t frames, const float *inputLeft, const float 
         pendingEvents[pendingEventCount++] = events[nextEvent];
 
     return true;
+}
+
+void EngineFacade::reconcileWavetablesIfNeeded()
+{
+    if (!wavetablesDirty)
+        return;
+    // false means a staging slot was still in flight; the next block tries again
+    wavetablesDirty = !engine->reconcileWavetables();
+    // Hand the tables to the audio patch now rather than at the next render, so a note
+    // dispatched straight after a load or waveform edit latches the new table.
+    static const clap_output_events_t discardOutput{
+        nullptr, [](const clap_output_events_t *, const clap_event_header_t *) { return true; }};
+    engine->processUIQueue(&discardOutput);
 }
 
 Synth &EngineFacade::synth() { return *engine; }

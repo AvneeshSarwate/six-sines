@@ -25,14 +25,18 @@ add_subdirectory(libs/sst/sst-filters EXCLUDE_FROM_ALL)
 
 set(SST_PLUGININFRA_PROVIDE_TINYXML ON CACHE BOOL "Provide TinyXML" FORCE)
 set(SST_PLUGININFRA_PROVIDE_PATCHBASE ON CACHE BOOL "Provide PatchBase" FORCE)
-set(SST_PLUGININFRA_PROVIDE_MINIZ OFF CACHE BOOL "No archive filesystem in the web engine" FORCE)
+# Patches carry user wavetables as miniz-compressed blobs, so the web engine needs miniz too.
+set(SST_PLUGININFRA_PROVIDE_MINIZ ON CACHE BOOL "Wavetable blob compression" FORCE)
 set(SST_PLUGININFRA_BUILD_TESTS OFF CACHE BOOL "No dependency tests in the web engine" FORCE)
 add_subdirectory(libs/sst/sst-plugininfra EXCLUDE_FROM_ALL)
 
 add_subdirectory(libs/libsamplerate EXCLUDE_FROM_ALL)
+add_subdirectory(libs/pffft EXCLUDE_FROM_ALL)
 
 add_library(six-sines-core STATIC
         src/dsp/sintable.cpp
+        src/dsp/wavetable_build.cpp
+        src/dsp/wavetable_io.cpp
         src/synth/synth.cpp
         src/synth/voice.cpp
         src/synth/patch.cpp
@@ -49,9 +53,12 @@ target_link_libraries(six-sines-core PUBLIC
         simde
         fmt-header-only
         sst-basic-blocks sst-voicemanager sst-cpputils sst-filters
+        sst-plugininfra::filesystem
         sst-plugininfra::tinyxml
         sst-plugininfra::patchbase
+        sst-plugininfra::miniz
         sst-plugininfra::version_information
+        pffft
         samplerate
 )
 

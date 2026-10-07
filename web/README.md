@@ -36,6 +36,15 @@ For the intended preset workflow:
 Using the paired CLAP for sound design minimizes source drift. Preset loading preserves the
 authored patch; the runtime does not rewrite it into a browser-specific format.
 
+## Wavetables
+
+User wavetables travel inside the preset (`<wavetables>` / `<sourceWavetables>`), so
+`loadPreset` is the only way to install one. The facade rebuilds tables after every load
+and whenever an operator's Waveform, Wavetable Playback, or Mip Chain parameter changes,
+and hands them to the audio patch before the next note is dispatched. (The native plugin
+does this from the editor's idle loop; a headless engine has no editor.) Browsing installed
+wavetable libraries is native-only and returns nothing in this build.
+
 ## Real-time API
 
 ```js

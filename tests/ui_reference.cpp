@@ -28,7 +28,7 @@ struct ReferenceApp : juce::JUCEApplication, juce::Timer
         setenv("SIX_SINES_TEST_USER_DATA_DIR", userData.getFullPathName().toRawUTF8(), 1);
         synth = std::make_unique<Synth>(false);
         editor = std::make_unique<ui::SixSinesEditor>(
-            synth->patchMain, synth->audioToMain, synth->mainToAudio,
+            synth->patchMain, synth->wavetableHandoff, synth->audioToMain, synth->mainToAudio,
             synth->audioOutputRing, synth->editorActive, synth->uiForceRebuild,
             synth->dawStateMain, *synth->defaultsProvider, &host);
         editor->setSize(ui::SixSinesEditor::edWidth, ui::SixSinesEditor::edHeight);

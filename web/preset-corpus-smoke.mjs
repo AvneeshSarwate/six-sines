@@ -65,7 +65,7 @@ try {
       wasm.HEAPU8.set(bytes, presetPointer);
       assert.equal(wasm._sx_load_preset_utf8(handle, presetPointer, bytes.byteLength), 1,
         `preset load failed: ${file}`);
-      assert.equal(wasm._sx_get_param_count(handle), 2554, `parameter count changed: ${file}`);
+      assert.equal(wasm._sx_get_param_count(handle), 2591, `parameter count changed: ${file}`);
       writeNoteOn(10_000 + index, 48 + index % 24);
       for (let frame = 0; frame < renderFrames; frame += renderQuantum) {
         assert.equal(wasm._sx_process(handle, renderQuantum, 0, 0,

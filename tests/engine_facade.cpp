@@ -15,6 +15,7 @@
 
 #include <clap/ext/params.h>
 
+#include "dsp/wavetable_io.h"
 #include "headless/engine_facade.h"
 #include "synth/patch.h"
 #include "synth/synth.h"
@@ -186,4 +187,55 @@ TEST_CASE("raw MIDI forwards controllers and sustain through the plugin voice ma
     REQUIRE(rms(left, frames / 2, frames) < .00001);
     REQUIRE(render(midi(0x92, 60, 100)) > .001);
     REQUIRE(render(midi(0xb2, 120, 0)) < .00001);
+}
+
+TEST_CASE("headless facade builds wavetables from presets and waveform edits",
+          "[headless][facade][wavetable]")
+{
+    auto render = [](headless::EngineFacade &facade, std::vector<sx_event> events)
+    {
+        std::vector<float> left(frames), right(frames);
+        REQUIRE(facade.process(frames, nullptr, nullptr, left.data(), right.data(),
+                               events.data(), static_cast<uint32_t>(events.size())));
+        return left;
+    };
+    auto noteOn = event(0, SX_EVENT_NOTE_ON, 1, 60, 0, 0.8);
+
+    SECTION("a preset with an embedded table plays it")
+    {
+        auto statePatch = std::make_unique<Patch>();
+        const auto &bytes = defaultWavetableBytes();
+        auto idx = statePatch->addWavetableBlob(bytes, "embedded");
+        REQUIRE(idx == 0);
+        statePatch->sourceNodes[0].wavetableBlobIndex = idx;
+        statePatch->sourceNodes[0].waveForm.value = SinTable::USER_TABLE;
+        statePatch->sourceNodes[0].wavetableMorph.value = 1.f;
+
+        headless::EngineFacade facade(48000.0);
+        REQUIRE(facade.loadPreset(statePatch->toState()));
+        REQUIRE(facade.synth().patchMain.sourceNodes[0].wavetable);
+        auto out = render(facade, {noteOn});
+        REQUIRE(facade.synth().patch.sourceNodes[0].wavetable);
+        REQUIRE(rms(out, frames / 2, frames) > 1e-3);
+
+        // the same note through a plain sine differs: the saw end of the table is playing
+        headless::EngineFacade sine(48000.0);
+        REQUIRE(sine.loadPreset(Patch().toState()));
+        auto ref = render(sine, {noteOn});
+        double diff{0};
+        for (uint32_t i = frames / 2; i < frames; ++i)
+            diff += std::abs(out[i] - ref[i]);
+        REQUIRE(diff / (frames / 2) > 1e-3);
+    }
+
+    SECTION("switching the waveform to Wavetable builds the built in table")
+    {
+        headless::EngineFacade facade(48000.0);
+        REQUIRE(facade.loadPreset(Patch().toState()));
+        REQUIRE(!facade.synth().patchMain.sourceNodes[0].wavetable);
+        auto wfid = facade.synth().patch.sourceNodes[0].waveForm.meta.id;
+        render(facade, {event(0, SX_EVENT_PARAM_VALUE, -1, -1, wfid, SinTable::USER_TABLE)});
+        REQUIRE(facade.synth().patchMain.sourceNodes[0].wavetable);
+        REQUIRE(facade.synth().patch.sourceNodes[0].wavetable);
+    }
 }

@@ -24,7 +24,9 @@
 
 #include "miniz.h"
 
+#if !defined(SIX_SINES_PORTABLE)
 #include "sst/plugininfra/paths.h"
+#endif
 #include "filesystem/import.h"
 
 namespace baconpaul::six_sines
@@ -211,6 +213,8 @@ std::vector<FactoryWavetableLibrary> factoryWavetableLibraries()
 {
     std::vector<FactoryWavetableLibrary> res;
 
+#if !defined(SIX_SINES_PORTABLE)
+
     auto addIfDir = [&res](const std::string &vendor, const std::string &label, const fs::path &p)
     {
         try
@@ -338,6 +342,8 @@ std::vector<FactoryWavetableLibrary> factoryWavetableLibraries()
             }
         }
     }
+
+#endif
 
     return res;
 }
