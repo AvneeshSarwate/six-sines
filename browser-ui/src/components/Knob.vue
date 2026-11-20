@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, ref, watch } from 'vue'
-import { byId, display, editorKey, readDisplay } from '../model'
+import { computed, inject } from 'vue'
+import { byId, display, editorKey } from '../model'
+import { useValueEntry } from './useValueEntry'
 const props = defineProps<{ id: number; label?: string; small?: boolean; disabled?: boolean }>()
 const emit = defineEmits<{ select: [] }>()
 const store = inject(editorKey)!
@@ -13,21 +14,7 @@ const angle = computed(() => -135 + normalized.value * 270)
 const baseline = computed(() =>
   p.value.min < 0 && p.value.max > 0 ? -p.value.min / (p.value.max - p.value.min) : 0,
 )
-const editing = ref(false),
-  text = ref('')
-const entry = ref<HTMLInputElement | null>(null)
-// The entry is a one-shot editor over the current value: it closes when the
-// knob is reused for another parameter (the inspector swaps ids when another
-// node is selected) or the value changes from anywhere else (a drag, the
-// host, an undo), so it never shows a stale number.
-watch(
-  () => props.id,
-  () => cancel(),
-)
-watch(value, () => {
-  if (editing.value && !committing) cancel()
-})
-let committing = false
+const { editing, text, open: edit, cancel, commit } = useValueEntry(store, p, value)
 let startY = 0,
   startValue = 0
 function down(e: PointerEvent) {
@@ -48,31 +35,8 @@ function move(e: PointerEvent) {
 function up() {
   store.end()
 }
-function edit() {
-  if (props.disabled) return
-  text.value = display(p.value, value.value)
-  editing.value = true
-  void nextTick(() => {
-    entry.value?.focus()
-    entry.value?.select()
-  })
-}
-function cancel() {
-  editing.value = false
-}
-function commit() {
-  if (!editing.value) return
-  // Unchanged text (Enter or a click away without typing): just close
-  if (text.value === display(p.value, value.value)) return cancel()
-  try {
-    committing = true
-    store.set(props.id, readDisplay(p.value, text.value))
-    editing.value = false
-  } catch (e) {
-    store.error.value = String(e)
-  } finally {
-    committing = false
-  }
+function dblclick() {
+  if (!props.disabled) edit()
 }
 function key(e: KeyboardEvent) {
   if (props.disabled) return
@@ -105,13 +69,13 @@ function key(e: KeyboardEvent) {
       :aria-valuemax="p.max"
       :aria-valuenow="value"
       :aria-valuetext="display(p, value)"
-      :title="`${p.name}: ${display(p, value)} · Double-click to type · Alt-click to reset`"
+      :data-tip="`${p.name}: ${display(p, value)} · Double-click to type · Alt-click to reset`"
       :data-param-id="id"
       @pointerdown="down"
       @pointermove="move"
       @pointerup="up"
       @lostpointercapture="up"
-      @dblclick="edit"
+      @dblclick="dblclick"
       @keydown="key"
       @click.alt="!disabled && store.set(id, p.default)"
     >
@@ -170,7 +134,7 @@ function key(e: KeyboardEvent) {
     </div>
     <input
       v-if="editing"
-      ref="entry"
+      ref="value-entry"
       v-model="text"
       class="knob-entry"
       :aria-label="`${p.name} value`"

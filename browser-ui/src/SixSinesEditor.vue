@@ -17,6 +17,7 @@ import Knob from './components/Knob.vue'
 import PlaySettings from './components/PlaySettings.vue'
 import MatrixMode from './components/MatrixMode.vue'
 import Inspector from './components/Inspector.vue'
+import HoverTip from './components/HoverTip.vue'
 const props = withDefaults(
   defineProps<{
     playable?: boolean
@@ -510,7 +511,7 @@ defineExpose({
       </footer>
     </div>
     <footer class="workspace-footer">
-      <span>Drag knobs · Shift for fine adjustment · Double-click to enter a value</span
+      <span>Drag knobs and sliders · Shift for fine adjustment · Double-click to enter a value</span
       ><span role="status">{{ notice || 'Import a preset or start from Init.' }}</span>
     </footer>
     <div
@@ -713,5 +714,6 @@ defineExpose({
         </div>
       </section>
     </div>
+    <HoverTip />
   </main>
 </template>

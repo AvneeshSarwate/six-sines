@@ -550,6 +550,44 @@ summary::-webkit-details-marker {
 .param-field > span {
   overflow-wrap: anywhere;
 }
+/* A slider's exact-value entry (double-click), over the field */
+.param-field {
+  position: relative;
+}
+.knob-entry.slider-entry {
+  top: 50%;
+  left: 50%;
+  width: 92px;
+  transform: translate(-50%, -50%);
+}
+/* Fast hover text (HoverTip.vue): positioned in the workspace's coordinates */
+.workspace {
+  position: relative;
+}
+.hover-tip {
+  position: absolute;
+  z-index: 50;
+  transform: translateX(-50%);
+  width: max-content;
+  padding: 3px 7px;
+  border: 1px solid #4a4a4e;
+  border-radius: 3px;
+  background: #18181a;
+  color: #dcdcde;
+  font:
+    11px Anonymous,
+    monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  box-shadow: 0 3px 9px #0009;
+}
+.hover-tip.above {
+  transform: translate(-50%, -100%);
+}
+.hover-tip.shown {
+  visibility: visible;
+}
 .param-field select {
   width: 100%;
   font-size: 11px;

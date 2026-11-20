@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import { display, editorKey, shortName, type Choice, type Parameter } from '../model'
+import { useValueEntry } from './useValueEntry'
 const props = defineProps<{
   param?: Parameter
   label?: string
@@ -29,13 +30,48 @@ const options = computed(() =>
 function update(e: Event) {
   if (p.value) s.set(p.value.id, Number((e.target as HTMLInputElement).value))
 }
+const { editing, text, open, cancel, commit } = useValueEntry(s, p, value)
+
+// Sliders drag relative to where they are pressed (the full length is the
+// full range, Shift for fine), as in the native editor, rather than jumping
+// to the click: a double-click to type a value must not move it first.
+let startPos = 0,
+  startValue = 0,
+  span = 1
+function sliderDown(e: PointerEvent) {
+  if (props.disabled || e.button !== 0 || !p.value) return
+  e.preventDefault()
+  const el = e.currentTarget as HTMLInputElement
+  el.focus()
+  const r = el.getBoundingClientRect()
+  span = Math.max(1, props.vertical ? r.height : r.width)
+  startPos = props.vertical ? -e.clientY : e.clientX
+  startValue = value.value
+  el.setPointerCapture(e.pointerId)
+  s.begin()
+}
+function sliderMove(e: PointerEvent) {
+  const el = e.currentTarget as HTMLInputElement
+  if (!p.value || !el.hasPointerCapture(e.pointerId)) return
+  const delta = (props.vertical ? -e.clientY : e.clientX) - startPos
+  s.set(
+    p.value.id,
+    startValue + (delta / span) * (e.shiftKey ? 0.1 : 1) * (p.value.max - p.value.min),
+  )
+}
+function sliderUp() {
+  s.end()
+}
+function sliderDblclick() {
+  if (!props.disabled) open()
+}
 </script>
 <template>
   <label
     v-if="p"
     class="param-field"
     :class="{ vertical, compact, disabled }"
-    :title="`${p.name}: ${display(p, value)}`"
+    :data-tip="`${p.name}: ${display(p, value)}`"
   >
     <span v-if="!toggle">{{ label ?? shortName(p) }}</span>
     <button
@@ -118,11 +154,25 @@ function update(e: Event) {
         :step="p.type === 1 ? 1 : 'any'"
         :value="value"
         :style="{ '--fill': `${((value - p.min) / (p.max - p.min)) * 100}%` }"
-        @pointerdown="s.begin"
-        @pointerup="s.end"
-        @input="update"
-        @change="s.end"
-      /><output v-if="!vertical && !compact">{{ display(p, value) }}</output></template
-    >
+        @pointerdown="sliderDown"
+        @pointermove="sliderMove"
+        @pointerup="sliderUp"
+        @lostpointercapture="sliderUp"
+        @dblclick.prevent="sliderDblclick"
+        @keydown.enter.prevent="open"
+        @input="update" /><output
+        v-if="!vertical && !compact"
+        @dblclick="sliderDblclick"
+        >{{ display(p, value) }}</output
+      ><input
+        v-if="editing"
+        ref="value-entry"
+        v-model="text"
+        class="knob-entry slider-entry"
+        :aria-label="`${p.name} value`"
+        @keydown.enter="commit"
+        @keydown.esc="cancel"
+        @blur="commit"
+    /></template>
   </label>
 </template>

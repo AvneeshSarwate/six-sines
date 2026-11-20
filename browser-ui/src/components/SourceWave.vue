@@ -132,7 +132,7 @@ const paths = computed(() => {
   <div
     class="wave-plots"
     :class="{ mapped: mode === 1 }"
-    :title="mode === 3 ? 'Noise illustration; random output varies' : undefined"
+    :data-tip="mode === 3 ? 'Noise illustration; random output varies' : undefined"
   >
     <svg
       v-if="mode === 1"
