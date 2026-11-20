@@ -353,14 +353,17 @@ defineExpose({
             <Knob
               :id="500"
               label="Level"
+              :class="{ selected: selection.group === node('main').group }"
               @select="select(node('main'))"
             /><Knob
               :id="537"
               label="Pan"
+              :class="{ selected: selection.group === node('pan').group }"
               @select="select(node('pan'))"
             /><Knob
               :id="536"
               label="Tune"
+              :class="{ selected: selection.group === node('tune').group }"
               @select="select(node('tune'))"
             />
           </div>
@@ -418,6 +421,7 @@ defineExpose({
             v-for="i in 6"
             :key="i"
             class="mixer-row"
+            :class="{ selected: selection.group === node('mixer', i - 1).group }"
           >
             <div class="mixer-switches">
               <button

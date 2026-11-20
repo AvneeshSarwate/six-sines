@@ -329,6 +329,13 @@ summary::-webkit-details-marker {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 3px;
 }
+.main-knobs .knob-wrap,
+.mixer-row,
+.matrix-cell,
+.macro-cell {
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
 .matrix-cell,
 .macro-cell {
   min-width: 0;
