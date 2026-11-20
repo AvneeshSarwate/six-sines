@@ -13,6 +13,9 @@ const text = ref('')
 const pos = ref({ x: 0, y: 0, above: false })
 const shown = ref(false)
 let target: Element | null = null
+// A double-click (typing a value) hides the tip until the pointer moves to
+// another control
+let suppressed = false
 let timer = 0
 let frame = 0
 
@@ -35,6 +38,7 @@ function place() {
   frame = requestAnimationFrame(place)
 }
 function show() {
+  if (suppressed) return
   shown.value = true
   cancelAnimationFrame(frame)
   place()
@@ -48,8 +52,13 @@ function over(e: Event) {
   const next = (e.target as Element | null)?.closest?.('[data-tip]') ?? null
   if (next === target) return
   target = next
+  suppressed = false
   hide()
   if (target) timer = window.setTimeout(show, props.delay)
+}
+function dblclick() {
+  suppressed = true
+  hide()
 }
 function leave(e: PointerEvent) {
   const to = e.relatedTarget as Element | null
@@ -64,10 +73,12 @@ onMounted(() => {
   host = tip.value?.parentElement ?? null
   host?.addEventListener('pointerover', over)
   host?.addEventListener('pointerout', leave as EventListener)
+  host?.addEventListener('dblclick', dblclick)
 })
 onBeforeUnmount(() => {
   host?.removeEventListener('pointerover', over)
   host?.removeEventListener('pointerout', leave as EventListener)
+  host?.removeEventListener('dblclick', dblclick)
   hide()
 })
 </script>

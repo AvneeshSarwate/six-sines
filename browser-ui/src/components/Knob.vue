@@ -69,7 +69,7 @@ function key(e: KeyboardEvent) {
       :aria-valuemax="p.max"
       :aria-valuenow="value"
       :aria-valuetext="display(p, value)"
-      :data-tip="`${p.name}: ${display(p, value)} · Double-click to type · Alt-click to reset`"
+      :data-tip="`${p.name}: ${display(p, value)}`"
       :data-param-id="id"
       @pointerdown="down"
       @pointermove="move"
