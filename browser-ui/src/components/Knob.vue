@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject, nextTick, ref, watch } from 'vue'
 import { byId, display, editorKey, readDisplay } from '../model'
 const props = defineProps<{ id: number; label?: string; small?: boolean; disabled?: boolean }>()
 const emit = defineEmits<{ select: [] }>()
@@ -15,6 +15,19 @@ const baseline = computed(() =>
 )
 const editing = ref(false),
   text = ref('')
+const entry = ref<HTMLInputElement | null>(null)
+// The entry is a one-shot editor over the current value: it closes when the
+// knob is reused for another parameter (the inspector swaps ids when another
+// node is selected) or the value changes from anywhere else (a drag, the
+// host, an undo), so it never shows a stale number.
+watch(
+  () => props.id,
+  () => cancel(),
+)
+watch(value, () => {
+  if (editing.value && !committing) cancel()
+})
+let committing = false
 let startY = 0,
   startValue = 0
 function down(e: PointerEvent) {
@@ -39,13 +52,26 @@ function edit() {
   if (props.disabled) return
   text.value = display(p.value, value.value)
   editing.value = true
+  void nextTick(() => {
+    entry.value?.focus()
+    entry.value?.select()
+  })
+}
+function cancel() {
+  editing.value = false
 }
 function commit() {
+  if (!editing.value) return
+  // Unchanged text (Enter or a click away without typing): just close
+  if (text.value === display(p.value, value.value)) return cancel()
   try {
+    committing = true
     store.set(props.id, readDisplay(p.value, text.value))
     editing.value = false
   } catch (e) {
     store.error.value = String(e)
+  } finally {
+    committing = false
   }
 }
 function key(e: KeyboardEvent) {
@@ -144,12 +170,13 @@ function key(e: KeyboardEvent) {
     </div>
     <input
       v-if="editing"
+      ref="entry"
       v-model="text"
       class="knob-entry"
       :aria-label="`${p.name} value`"
       @keydown.enter="commit"
-      @keydown.esc="editing = false"
-      @change="commit"
+      @keydown.esc="cancel"
+      @blur="commit"
     />
     <span
       v-if="label"
